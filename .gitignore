@@ -1,0 +1,27 @@
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Binary framework (built by scripts/build-xcframework.sh)
+Frameworks/libghostty.xcframework/
+
+# macOS
+.DS_Store
+
+# IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
