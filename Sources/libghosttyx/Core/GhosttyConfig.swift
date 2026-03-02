@@ -17,11 +17,6 @@ public final class GhosttyConfig {
         rawConfig = cfg
     }
 
-    /// Creates a wrapper around an existing config pointer. Does NOT take ownership.
-    init(borrowing config: ghostty_config_t) {
-        rawConfig = config
-    }
-
     /// Creates a wrapper by cloning an existing config.
     init(cloning config: ghostty_config_t) {
         rawConfig = ghostty_config_clone(config)

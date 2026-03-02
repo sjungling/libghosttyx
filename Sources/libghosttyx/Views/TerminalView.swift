@@ -50,9 +50,9 @@ open class TerminalView: NSView, NSTextInputClient {
     /// Display link for driving rendering.
     private var displayLink: CVDisplayLink?
 
-    /// Weak box passed to the CVDisplayLink callback so it can safely
-    /// reference this view without preventing deallocation.
-    private var displayLinkBox: AnyObject?
+    /// Raw pointer to the retained WeakBox passed to CVDisplayLink.
+    /// Stored for teardown — released in deinit via Unmanaged.
+    private var displayLinkBoxPtr: UnsafeMutableRawPointer?
 
     // MARK: - Initialization
 
@@ -83,11 +83,9 @@ open class TerminalView: NSView, NSTextInputClient {
         if let link = displayLink {
             CVDisplayLinkStop(link)
         }
-        // Release the retained weak box from the display link callback.
-        // CVDisplayLinkStop prevents future callbacks, and any in-flight
-        // async blocks hold only a weak reference to self via the box.
-        if let box = displayLinkBox {
-            Unmanaged.passUnretained(box).release()
+        // Release the retained WeakBox that was passed to CVDisplayLink.
+        if let ptr = displayLinkBoxPtr {
+            Unmanaged<WeakBox<TerminalView>>.fromOpaque(ptr).release()
         }
         NotificationCenter.default.removeObserver(self)
     }
@@ -144,8 +142,8 @@ open class TerminalView: NSView, NSTextInputClient {
         guard let link = link else { return }
 
         let box = WeakBox(self)
-        self.displayLinkBox = box
         let ud = Unmanaged.passRetained(box).toOpaque()
+        self.displayLinkBoxPtr = ud
         CVDisplayLinkSetOutputCallback(link, { (_, _, _, _, _, userInfo) -> CVReturn in
             guard let userInfo = userInfo else { return kCVReturnSuccess }
             let box = Unmanaged<WeakBox<TerminalView>>.fromOpaque(userInfo).takeUnretainedValue()
@@ -583,7 +581,7 @@ open class TerminalView: NSView, NSTextInputClient {
                 delegate?.requestOpenLink(source: self, url: url)
             }
 
-        case .childExited(let exitCode, let runtimeMs):
+        case .showChildExited(let exitCode, let runtimeMs):
             delegate?.processExited(source: self, exitCode: exitCode, runtimeMs: runtimeMs)
 
         case .desktopNotification(let title, let body):

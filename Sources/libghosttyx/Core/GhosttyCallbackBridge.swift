@@ -55,6 +55,16 @@ enum GhosttyCallbackBridge {
 
             let view = Unmanaged<TerminalView>.fromOpaque(viewPtr).takeUnretainedValue()
 
+            // CONFIG_CHANGE carries a borrowed config pointer that is only valid
+            // during this synchronous callback. Call the C API directly to
+            // avoid async dispatch (which would use a dangling pointer).
+            if rawAction.tag == GHOSTTY_ACTION_CONFIG_CHANGE {
+                if let config = rawAction.action.config_change.config {
+                    ghostty_surface_update_config(surface, config)
+                }
+                return true
+            }
+
             DispatchQueue.main.async {
                 view.handleAction(action)
             }
@@ -79,7 +89,6 @@ enum GhosttyCallbackBridge {
                  GHOSTTY_ACTION_SHOW_CHILD_EXITED,
                  GHOSTTY_ACTION_PROGRESS_REPORT,
                  GHOSTTY_ACTION_SECURE_INPUT,
-                 GHOSTTY_ACTION_CONFIG_CHANGE,
                  GHOSTTY_ACTION_RELOAD_CONFIG:
                 return true
             default:
@@ -148,20 +157,20 @@ enum GhosttyCallbackBridge {
         guard clipboardType == GHOSTTY_CLIPBOARD_STANDARD,
               let content = content, count > 0 else { return }
 
-        DispatchQueue.main.async {
-            // Use the first content entry
-            let entry = content.pointee
-            if let dataPtr = entry.data {
-                let str = String(cString: dataPtr)
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(str, forType: .string)
+        // Copy the C string synchronously — the pointer is only valid during this callback.
+        let entry = content.pointee
+        guard let dataPtr = entry.data else { return }
+        let str = String(cString: dataPtr)
 
-                // Notify the delegate
-                if let userdata = userdata {
-                    let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
-                    view.delegate?.clipboardCopy(source: view, content: str)
-                }
+        DispatchQueue.main.async {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(str, forType: .string)
+
+            // Notify the delegate
+            if let userdata = userdata {
+                let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
+                view.delegate?.clipboardCopy(source: view, content: str)
             }
         }
     }

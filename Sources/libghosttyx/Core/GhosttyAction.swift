@@ -16,17 +16,15 @@ public enum GhosttyAction {
     case render
     case colorChange(kind: ghostty_action_color_kind_e, r: UInt8, g: UInt8, b: UInt8)
     case openURL(String)
-    case configChange(ghostty_config_t)
     case reloadConfig(soft: Bool)
     case sizeLimit(minWidth: UInt32, minHeight: UInt32, maxWidth: UInt32, maxHeight: UInt32)
     case initialSize(width: UInt32, height: UInt32)
     case desktopNotification(title: String, body: String)
     case mouseOverLink(String?)
     case rendererHealth(ghostty_action_renderer_health_e)
-    case childExited(exitCode: UInt32, runtimeMs: UInt64)
+    case showChildExited(exitCode: UInt32, runtimeMs: UInt64)
     case progressReport(state: ghostty_action_progress_report_state_e, progress: Int8)
     case secureInput(ghostty_action_secure_input_e)
-    case showChildExited
 
     // App-level actions (not routed to individual surfaces)
     case quit
@@ -87,9 +85,6 @@ public enum GhosttyAction {
             }
             return .openURL("")
 
-        case GHOSTTY_ACTION_CONFIG_CHANGE:
-            return .configChange(raw.action.config_change.config)
-
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             return .reloadConfig(soft: raw.action.reload_config.soft)
 
@@ -122,7 +117,7 @@ public enum GhosttyAction {
 
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
             let ce = raw.action.child_exited
-            return .childExited(exitCode: ce.exit_code, runtimeMs: ce.timetime_ms)
+            return .showChildExited(exitCode: ce.exit_code, runtimeMs: ce.timetime_ms)
 
         case GHOSTTY_ACTION_PROGRESS_REPORT:
             let pr = raw.action.progress_report
