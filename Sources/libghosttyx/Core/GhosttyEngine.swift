@@ -29,7 +29,28 @@ public final class GhosttyEngine {
     /// Whether the engine has been initialized.
     public var isInitialized: Bool { app != nil }
 
-    private init() {}
+    private init() {
+        // Observe app activation to set focus state
+        let center = NotificationCenter.default
+        center.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        center.addObserver(
+            self,
+            selector: #selector(applicationDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
+        center.addObserver(
+            self,
+            selector: #selector(keyboardSelectionDidChange),
+            name: NSTextInputContext.keyboardSelectionDidChangeNotification,
+            object: nil
+        )
+    }
 
     /// Initializes the engine with the given terminal configuration.
     ///
@@ -78,8 +99,17 @@ public final class GhosttyEngine {
 
         self.app = appInstance
 
-        // Set initial focus based on NSApp state
+        // Set initial focus based on NSApp state.
+        // Also schedule a deferred check because NSApp.isActive may not be
+        // true yet during applicationDidFinishLaunching, and the
+        // didBecomeActiveNotification may have already fired before our
+        // observers were registered.
         ghostty_app_set_focus(appInstance, NSApp?.isActive ?? false)
+        // Schedule a deferred focus check — activation may not have completed yet
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self, let app = self.app else { return }
+            ghostty_app_set_focus(app, NSApp?.isActive ?? false)
+        }
 
         // Detect initial color scheme
         let isDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -124,6 +154,23 @@ public final class GhosttyEngine {
         return try cfg.withCConfig { cConfig in
             try GhosttySurface(app: app, config: &cConfig)
         }
+    }
+
+    // MARK: - Notification Handlers
+
+    @objc private func applicationDidBecomeActive(_ notification: Notification) {
+        guard let app = app else { return }
+        ghostty_app_set_focus(app, true)
+    }
+
+    @objc private func applicationDidResignActive(_ notification: Notification) {
+        guard let app = app else { return }
+        ghostty_app_set_focus(app, false)
+    }
+
+    @objc private func keyboardSelectionDidChange(_ notification: Notification) {
+        guard let app = app else { return }
+        ghostty_app_keyboard_changed(app)
     }
 
     // MARK: - Private

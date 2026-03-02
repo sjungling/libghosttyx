@@ -43,6 +43,13 @@ open class TerminalView: NSView, NSTextInputClient {
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
     private var _selectedRange: NSRange = .init(location: 0, length: 0)
 
+    /// Text accumulated from insertText during a keyDown event.
+    /// When non-nil, we're inside a keyDown → interpretKeyEvents call.
+    private var keyTextAccumulator: [String]?
+
+    /// Display link for driving rendering.
+    private var displayLink: CVDisplayLink?
+
     // MARK: - Initialization
 
     public override init(frame frameRect: NSRect) {
@@ -69,6 +76,9 @@ open class TerminalView: NSView, NSTextInputClient {
     }
 
     deinit {
+        if let link = displayLink {
+            CVDisplayLinkStop(link)
+        }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -110,6 +120,33 @@ open class TerminalView: NSView, NSTextInputClient {
         }
 
         updateColorScheme()
+
+        // Start display link to drive rendering. The ghostty renderer thread's
+        // async layer.contents updates aren't reliably composited by CA in a
+        // minimal AppKit app. A display link calling ghostty_surface_draw()
+        // synchronously renders and presents via the setSurfaceSync path.
+        startDisplayLink()
+    }
+
+    private nonisolated func startDisplayLink() {
+        var link: CVDisplayLink?
+        CVDisplayLinkCreateWithActiveCGDisplays(&link)
+        guard let link = link else { return }
+
+        let ud = Unmanaged.passUnretained(self).toOpaque()
+        CVDisplayLinkSetOutputCallback(link, { (_, _, _, _, _, userInfo) -> CVReturn in
+            guard let userInfo = userInfo else { return kCVReturnSuccess }
+            let view = Unmanaged<TerminalView>.fromOpaque(userInfo).takeUnretainedValue()
+            DispatchQueue.main.async {
+                view.surface?.draw()
+            }
+            return kCVReturnSuccess
+        }, ud)
+
+        CVDisplayLinkStart(link)
+        MainActor.assumeIsolated {
+            self.displayLink = link
+        }
     }
 
     // MARK: - View Lifecycle
@@ -152,6 +189,10 @@ open class TerminalView: NSView, NSTextInputClient {
 
     open override var acceptsFirstResponder: Bool { true }
 
+    open override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        return false
+    }
+
     open override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
         if result {
@@ -171,13 +212,77 @@ open class TerminalView: NSView, NSTextInputClient {
     // MARK: - Keyboard Input
 
     open override func keyDown(with event: NSEvent) {
-        // Let interpretKeyEvents handle IME and dispatch to ghostty
+        guard surface != nil else {
+            interpretKeyEvents([event])
+            return
+        }
+
+        let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+
+        // Track whether we had marked text before this event
+        let markedTextBefore = markedTextStorage.length > 0
+
+        // Begin accumulating text from insertText calls
+        keyTextAccumulator = []
+        defer { keyTextAccumulator = nil }
+
         interpretKeyEvents([event])
+
+        // Sync preedit state
+        if markedTextStorage.length > 0 {
+            surface?.sendPreedit(markedTextStorage.string)
+        } else if markedTextBefore {
+            surface?.sendPreedit(nil)
+        }
+
+        if let list = keyTextAccumulator, !list.isEmpty {
+            // We have composed text from insertText — send key with that text
+            for text in list {
+                sendKeyAction(action, event: event, text: text)
+            }
+        } else {
+            // No composed text — send key event with the event's characters
+            sendKeyAction(
+                action,
+                event: event,
+                text: event.ghosttyCharacters,
+                composing: markedTextStorage.length > 0 || markedTextBefore
+            )
+        }
     }
 
     open override func keyUp(with event: NSEvent) {
-        let keyEvent = event.ghosttyKeyEvent(action: GHOSTTY_ACTION_RELEASE)
-        surface?.sendKey(keyEvent)
+        sendKeyAction(GHOSTTY_ACTION_RELEASE, event: event)
+    }
+
+    open override func doCommand(by selector: Selector) {
+        // Intentionally empty — prevents NSBeep for unhandled selectors
+    }
+
+    /// Sends a key event to the ghostty surface.
+    private func sendKeyAction(
+        _ action: ghostty_input_action_e,
+        event: NSEvent,
+        text: String? = nil,
+        composing: Bool = false
+    ) {
+        guard let surface = surface else { return }
+
+        var key_ev = event.ghosttyKeyEvent(action)
+        key_ev.composing = composing
+
+        // Only send text if it's not a control character (ghostty handles those internally)
+        var result = false
+        if let text, !text.isEmpty,
+           let codepoint = text.utf8.first, codepoint >= 0x20 {
+            text.withCString { ptr in
+                key_ev.text = ptr
+                result = surface.sendKey(key_ev)
+            }
+        } else {
+            result = surface.sendKey(key_ev)
+        }
+
     }
 
     open override func flagsChanged(with event: NSEvent) {
@@ -320,27 +425,29 @@ open class TerminalView: NSView, NSTextInputClient {
 
     @MainActor
     public func insertText(_ string: Any, replacementRange: NSRange) {
-        // Clear marked text
-        markedTextStorage.mutableString.setString("")
-        _markedRange = NSRange(location: NSNotFound, length: 0)
+        guard NSApp.currentEvent != nil else { return }
 
-        guard let str = (string as? NSAttributedString)?.string ?? (string as? String) else {
+        let chars: String
+        switch string {
+        case let v as NSAttributedString:
+            chars = v.string
+        case let v as String:
+            chars = v
+        default:
             return
         }
 
-        // Send a key press with the text
-        var keyEvent = ghostty_input_key_s()
-        keyEvent.action = GHOSTTY_ACTION_PRESS
-        keyEvent.mods = ghostty_input_mods_e(0)
-        keyEvent.consumed_mods = ghostty_input_mods_e(0)
-        keyEvent.keycode = 0
-        keyEvent.composing = false
-        keyEvent.unshifted_codepoint = 0
+        // Clear marked text since insertText ends composition
+        unmarkText()
 
-        str.withCString { ptr in
-            keyEvent.text = ptr
-            surface?.sendKey(keyEvent)
+        // If we're inside a keyDown event, accumulate text for later
+        if keyTextAccumulator != nil {
+            keyTextAccumulator!.append(chars)
+            return
         }
+
+        // Outside keyDown (shouldn't happen normally), send text directly
+        surface?.sendText(chars)
     }
 
     @MainActor
@@ -452,7 +559,10 @@ open class TerminalView: NSView, NSTextInputClient {
             updateCursor(shape)
 
         case .render:
-            needsDisplay = true
+            // Tell ghostty to execute its Metal rendering pipeline.
+            // The RENDER action means "I have new content" — we must call
+            // ghostty_surface_draw to actually render it to the Metal layer.
+            surface?.draw()
 
         case .colorChange(let kind, let r, let g, let b):
             delegate?.colorChanged(source: self, kind: Int(kind.rawValue), r: r, g: g, b: b)

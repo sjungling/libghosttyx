@@ -81,6 +81,12 @@ public final class GhosttySurface {
         ghostty_surface_refresh(surface)
     }
 
+    /// Executes the Metal rendering pipeline for this surface.
+    func draw() {
+        guard let surface = rawSurface else { return }
+        ghostty_surface_draw(surface)
+    }
+
     // MARK: - Key Input
 
     /// Sends a key event to the surface.
