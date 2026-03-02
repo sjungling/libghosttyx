@@ -6,7 +6,8 @@ extension NSEvent {
     ///
     /// - Parameters:
     ///   - action: Whether this is a press, release, or repeat.
-    ///   - composing: Whether the key is part of an IME composition.
+    ///   - translationMods: Modifier flags to use for computing consumed mods.
+    ///     Defaults to the event's own modifier flags.
     /// - Returns: A key event struct ready to pass to `ghostty_surface_key`.
     func ghosttyKeyEvent(
         _ action: ghostty_input_action_e,
@@ -48,8 +49,9 @@ extension NSEvent {
 
         if characters.count == 1,
            let scalar = characters.unicodeScalars.first {
-            // Single control character: return characters without control pressed
-            if scalar.value < 0x20 {
+            // Control characters (C0 and DEL): return characters without control pressed.
+            // DEL (0x7F) is produced by the Delete key and must also be excluded.
+            if scalar.value < 0x20 || scalar.value == 0x7F {
                 return self.characters(byApplyingModifiers: modifierFlags.subtracting(.control))
             }
             // Private Use Area = function keys, don't send to Ghostty

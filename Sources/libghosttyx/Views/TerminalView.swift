@@ -50,6 +50,10 @@ open class TerminalView: NSView, NSTextInputClient {
     /// Display link for driving rendering.
     private var displayLink: CVDisplayLink?
 
+    /// Weak box passed to the CVDisplayLink callback so it can safely
+    /// reference this view without preventing deallocation.
+    private var displayLinkBox: AnyObject?
+
     // MARK: - Initialization
 
     public override init(frame frameRect: NSRect) {
@@ -78,6 +82,12 @@ open class TerminalView: NSView, NSTextInputClient {
     deinit {
         if let link = displayLink {
             CVDisplayLinkStop(link)
+        }
+        // Release the retained weak box from the display link callback.
+        // CVDisplayLinkStop prevents future callbacks, and any in-flight
+        // async blocks hold only a weak reference to self via the box.
+        if let box = displayLinkBox {
+            Unmanaged.passUnretained(box).release()
         }
         NotificationCenter.default.removeObserver(self)
     }
@@ -128,25 +138,26 @@ open class TerminalView: NSView, NSTextInputClient {
         startDisplayLink()
     }
 
-    private nonisolated func startDisplayLink() {
+    private func startDisplayLink() {
         var link: CVDisplayLink?
         CVDisplayLinkCreateWithActiveCGDisplays(&link)
         guard let link = link else { return }
 
-        let ud = Unmanaged.passUnretained(self).toOpaque()
+        let box = WeakBox(self)
+        self.displayLinkBox = box
+        let ud = Unmanaged.passRetained(box).toOpaque()
         CVDisplayLinkSetOutputCallback(link, { (_, _, _, _, _, userInfo) -> CVReturn in
             guard let userInfo = userInfo else { return kCVReturnSuccess }
-            let view = Unmanaged<TerminalView>.fromOpaque(userInfo).takeUnretainedValue()
-            DispatchQueue.main.async {
-                view.surface?.draw()
+            let box = Unmanaged<WeakBox<TerminalView>>.fromOpaque(userInfo).takeUnretainedValue()
+            guard let view = box.value else { return kCVReturnSuccess }
+            DispatchQueue.main.async { [weak view] in
+                view?.surface?.draw()
             }
             return kCVReturnSuccess
         }, ud)
 
+        self.displayLink = link
         CVDisplayLinkStart(link)
-        MainActor.assumeIsolated {
-            self.displayLink = link
-        }
     }
 
     // MARK: - View Lifecycle
@@ -648,4 +659,12 @@ open class TerminalView: NSView, NSTextInputClient {
     @objc private func appearanceDidChange(_ notification: Notification) {
         updateDisplayID()
     }
+}
+
+/// A box holding a weak reference, used to safely pass object references
+/// through C callback pointers (e.g., CVDisplayLink) without preventing
+/// deallocation of the referenced object.
+private final class WeakBox<T: AnyObject>: @unchecked Sendable {
+    weak var value: T?
+    init(_ value: T) { self.value = value }
 }
