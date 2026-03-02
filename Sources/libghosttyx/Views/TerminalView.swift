@@ -165,6 +165,37 @@ open class TerminalView: NSView, NSTextInputClient {
         surface?.sendText(text)
     }
 
+    /// Sends a synthetic key press + release for the given macOS keycode.
+    ///
+    /// Unlike ``sendText(_:)``, this goes through the keyboard input path
+    /// (not the paste path), so it isn't wrapped in bracketed-paste fenceposts.
+    /// Use this for control keys like Return that must trigger shell execution.
+    public func sendSyntheticKey(keyCode: UInt16, text: String? = nil) {
+        guard let surface else { return }
+
+        var key_ev = ghostty_input_key_s()
+        key_ev.action = GHOSTTY_ACTION_PRESS
+        key_ev.mods = ghostty_input_mods_e(0)
+        key_ev.consumed_mods = ghostty_input_mods_e(0)
+        key_ev.keycode = UInt32(keyCode)
+        key_ev.composing = false
+        key_ev.unshifted_codepoint = 0
+
+        if let text {
+            text.withCString { ptr in
+                key_ev.text = ptr
+                surface.sendKey(key_ev)
+            }
+        } else {
+            key_ev.text = nil
+            surface.sendKey(key_ev)
+        }
+
+        key_ev.action = GHOSTTY_ACTION_RELEASE
+        key_ev.text = nil
+        surface.sendKey(key_ev)
+    }
+
     /// Explicitly sets the terminal color scheme.
     public func setColorScheme(dark: Bool) {
         surface?.setColorScheme(dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
