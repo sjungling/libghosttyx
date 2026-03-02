@@ -158,6 +158,18 @@ open class TerminalView: NSView, NSTextInputClient {
         CVDisplayLinkStart(link)
     }
 
+    // MARK: - Public API
+
+    /// Sends text to the terminal's shell stdin.
+    public func sendText(_ text: String) {
+        surface?.sendText(text)
+    }
+
+    /// Explicitly sets the terminal color scheme.
+    public func setColorScheme(dark: Bool) {
+        surface?.setColorScheme(dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
     // MARK: - View Lifecycle
 
     open override func viewDidMoveToWindow() {
