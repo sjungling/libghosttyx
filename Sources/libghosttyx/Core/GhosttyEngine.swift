@@ -71,15 +71,15 @@ public final class GhosttyEngine {
         // Create and configure the config
         let cfg = try GhosttyConfig()
 
-        // Load custom config file if specified
-        if let customPath = termConfig.customConfigPath {
-            cfg.loadFile(customPath)
-        }
-
-        // Load defaults and CLI args
+        // Load defaults and CLI args first
         cfg.loadDefaultFiles()
         cfg.loadCLIArgs()
         cfg.loadRecursiveFiles()
+
+        // Load custom config file last so embedder config takes priority
+        if let customPath = termConfig.customConfigPath {
+            cfg.loadFile(customPath)
+        }
 
         // Apply high-level configuration overrides
         applyConfiguration(termConfig, to: cfg)

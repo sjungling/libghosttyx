@@ -96,6 +96,21 @@ enum GhosttyCallbackBridge {
             }
         }
 
+        // Handle app-level reload_config by re-applying the existing config
+        // so that conditional state (light/dark theme) gets re-evaluated.
+        if target.tag == GHOSTTY_TARGET_APP,
+           rawAction.tag == GHOSTTY_ACTION_RELOAD_CONFIG,
+           let app = app,
+           let enginePtr = ghostty_app_userdata(app) {
+            let engine = Unmanaged<GhosttyEngine>.fromOpaque(enginePtr).takeUnretainedValue()
+            MainActor.assumeIsolated {
+                if let rawConfig = engine.config?.rawConfig {
+                    ghostty_app_update_config(app, rawConfig)
+                }
+            }
+            return true
+        }
+
         // App-level actions — return false so the host app can handle them
         return false
     }
