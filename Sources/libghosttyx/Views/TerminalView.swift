@@ -19,7 +19,7 @@ import libghostty
 /// This view does NOT set `wantsLayer` — libghostty creates an `IOSurfaceLayer`
 /// and assigns it to the view's layer. Do not manipulate the layer yourself.
 @MainActor
-open class TerminalView: NSView, NSTextInputClient {
+open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     /// Delegate for receiving terminal callbacks.
     public weak var delegate: TerminalViewDelegate?
 
@@ -31,6 +31,29 @@ open class TerminalView: NSView, NSTextInputClient {
 
     /// Whether the terminal has been started.
     public var isRunning: Bool { surface != nil }
+
+    /// Returns the text content of a single viewport row (0-indexed from top).
+    public func readLineText(row: Int) -> String? {
+        guard let size = surface?.size else { return nil }
+        let sel = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row)),
+            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: UInt32(size.columns), y: UInt32(row)),
+            rectangle: true
+        )
+        return surface?.readText(selection: sel)
+    }
+
+    /// Returns grid dimensions and cell size in points (for coordinate mapping).
+    public var gridInfo: (columns: Int, rows: Int, cellWidth: CGFloat, cellHeight: CGFloat)? {
+        guard let size = surface?.size else { return nil }
+        let scale = window?.backingScaleFactor ?? 1.0
+        return (
+            columns: Int(size.columns),
+            rows: Int(size.rows),
+            cellWidth: CGFloat(size.cell_width_px) / scale,
+            cellHeight: CGFloat(size.cell_height_px) / scale
+        )
+    }
 
     /// Current terminal title.
     public private(set) var title: String = ""
@@ -199,6 +222,26 @@ open class TerminalView: NSView, NSTextInputClient {
     /// Explicitly sets the terminal color scheme.
     public func setColorScheme(dark: Bool) {
         surface?.setColorScheme(dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
+    /// Sets the terminal font size (in points).
+    public func setFontSize(_ size: Float) {
+        surface?.bindingAction("set_font_size:\(size)")
+    }
+
+    /// Increases the font size by the given delta.
+    public func increaseFontSize(_ delta: Float = 1) {
+        surface?.bindingAction("increase_font_size:\(delta)")
+    }
+
+    /// Decreases the font size by the given delta.
+    public func decreaseFontSize(_ delta: Float = 1) {
+        surface?.bindingAction("decrease_font_size:\(delta)")
+    }
+
+    /// Resets font size to the configured default.
+    public func resetFontSize() {
+        surface?.bindingAction("reset_font_size")
     }
 
     // MARK: - View Lifecycle

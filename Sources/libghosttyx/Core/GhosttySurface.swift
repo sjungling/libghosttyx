@@ -221,6 +221,26 @@ public final class GhosttySurface {
         }
     }
 
+    /// Reads text from a rectangular region of the terminal viewport.
+    func readText(selection: ghostty_selection_s) -> String? {
+        guard let surface = rawSurface else { return nil }
+        var sel = selection
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let ptr = text.text, text.text_len > 0 else { return nil }
+        return String(cString: ptr)
+    }
+
+    // MARK: - Binding Actions
+
+    /// Executes a binding action string (e.g. "set_font_size:16").
+    @discardableResult
+    func bindingAction(_ action: String) -> Bool {
+        guard let surface = rawSurface else { return false }
+        return ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+    }
+
     // MARK: - Config
 
     /// Updates the surface with new config.
