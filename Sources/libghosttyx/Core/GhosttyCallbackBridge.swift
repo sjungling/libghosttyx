@@ -8,6 +8,11 @@ import libghostty
 /// They use `Unmanaged` to recover the `GhosttyEngine` (for app-level callbacks)
 /// or `TerminalView` (for surface-level callbacks) from the opaque userdata pointers.
 enum GhosttyCallbackBridge {
+    /// Guard against infinite recursion when calling `ghostty_surface_update_config`
+    /// or `ghostty_app_update_config`. These can fire actions (CONFIG_CHANGE,
+    /// RELOAD_CONFIG) that re-enter this callback, causing unbounded recursion.
+    /// Thread-safe because all callbacks execute synchronously on the main thread.
+    private static var isUpdatingConfig = false
     /// Builds a `ghostty_runtime_config_s` wired to the given engine.
     @MainActor
     static func runtimeConfig(for engine: GhosttyEngine) -> ghostty_runtime_config_s {
@@ -55,20 +60,24 @@ enum GhosttyCallbackBridge {
 
             let view = Unmanaged<TerminalView>.fromOpaque(viewPtr).takeUnretainedValue()
 
-            // CONFIG_CHANGE carries a borrowed config pointer that is only valid
-            // during this synchronous callback. Call the C API directly to
-            // avoid async dispatch (which would use a dangling pointer).
+            // CONFIG_CHANGE is a notification that the config has already been
+            // updated internally by libghostty. We do NOT call
+            // ghostty_surface_update_config here — that would create an
+            // infinite cycle since update_config fires CONFIG_CHANGE again.
             if rawAction.tag == GHOSTTY_ACTION_CONFIG_CHANGE {
-                if let config = rawAction.action.config_change.config {
-                    ghostty_surface_update_config(surface, config)
-                }
                 return true
             }
 
             // RELOAD_CONFIG on a surface: re-apply the current config so that
             // conditional state (e.g. light/dark theme) gets re-evaluated.
             // This is triggered by colorSchemeCallback → notifyConfigConditionalState.
+            // Guard: ghostty_surface_update_config can re-fire actions that
+            // call back into this handler, causing infinite recursion.
             if rawAction.tag == GHOSTTY_ACTION_RELOAD_CONFIG {
+                guard !isUpdatingConfig else { return true }
+                isUpdatingConfig = true
+                defer { isUpdatingConfig = false }
+
                 if let app = app,
                    let enginePtr = ghostty_app_userdata(app) {
                     let engine = Unmanaged<GhosttyEngine>.fromOpaque(enginePtr).takeUnretainedValue()
@@ -113,10 +122,15 @@ enum GhosttyCallbackBridge {
 
         // Handle app-level reload_config by re-applying the existing config
         // so that conditional state (light/dark theme) gets re-evaluated.
+        // Same recursion guard as the surface-level handler above.
         if target.tag == GHOSTTY_TARGET_APP,
            rawAction.tag == GHOSTTY_ACTION_RELOAD_CONFIG,
            let app = app,
            let enginePtr = ghostty_app_userdata(app) {
+            guard !isUpdatingConfig else { return true }
+            isUpdatingConfig = true
+            defer { isUpdatingConfig = false }
+
             let engine = Unmanaged<GhosttyEngine>.fromOpaque(enginePtr).takeUnretainedValue()
             MainActor.assumeIsolated {
                 if let rawConfig = engine.config?.rawConfig {
