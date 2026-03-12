@@ -18,6 +18,7 @@ public struct TerminalViewRepresentable: NSViewRepresentable {
     public typealias NSViewType = LocalProcessTerminalView
 
     private let configuration: TerminalConfiguration
+    private let colorScheme: ColorScheme?
     private let onEvent: ((TerminalEvent) -> Void)?
 
     /// Events that can be observed from SwiftUI.
@@ -32,12 +33,16 @@ public struct TerminalViewRepresentable: NSViewRepresentable {
     ///
     /// - Parameters:
     ///   - configuration: Terminal configuration.
+    ///   - colorScheme: Explicit color scheme override. When `nil` (the default),
+    ///     the terminal follows the system appearance automatically.
     ///   - onEvent: Optional closure called for terminal events.
     public init(
         configuration: TerminalConfiguration = .init(),
+        colorScheme: ColorScheme? = nil,
         onEvent: ((TerminalEvent) -> Void)? = nil
     ) {
         self.configuration = configuration
+        self.colorScheme = colorScheme
         self.onEvent = onEvent
     }
 
@@ -48,7 +53,9 @@ public struct TerminalViewRepresentable: NSViewRepresentable {
     }
 
     public func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        // Configuration updates are not supported after creation
+        if let colorScheme {
+            nsView.setColorScheme(dark: colorScheme == .dark)
+        }
     }
 
     public func makeCoordinator() -> Coordinator {

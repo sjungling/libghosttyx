@@ -65,6 +65,22 @@ enum GhosttyCallbackBridge {
                 return true
             }
 
+            // RELOAD_CONFIG on a surface: re-apply the current config so that
+            // conditional state (e.g. light/dark theme) gets re-evaluated.
+            // This is triggered by colorSchemeCallback → notifyConfigConditionalState.
+            if rawAction.tag == GHOSTTY_ACTION_RELOAD_CONFIG {
+                if let app = app,
+                   let enginePtr = ghostty_app_userdata(app) {
+                    let engine = Unmanaged<GhosttyEngine>.fromOpaque(enginePtr).takeUnretainedValue()
+                    MainActor.assumeIsolated {
+                        if let rawConfig = engine.config?.rawConfig {
+                            ghostty_surface_update_config(surface, rawConfig)
+                        }
+                    }
+                }
+                return true
+            }
+
             DispatchQueue.main.async {
                 view.handleAction(action)
             }
@@ -88,8 +104,7 @@ enum GhosttyCallbackBridge {
                  GHOSTTY_ACTION_RENDERER_HEALTH,
                  GHOSTTY_ACTION_SHOW_CHILD_EXITED,
                  GHOSTTY_ACTION_PROGRESS_REPORT,
-                 GHOSTTY_ACTION_SECURE_INPUT,
-                 GHOSTTY_ACTION_RELOAD_CONFIG:
+                 GHOSTTY_ACTION_SECURE_INPUT:
                 return true
             default:
                 break
