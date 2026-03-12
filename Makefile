@@ -1,8 +1,16 @@
-.PHONY: build release clean
+.PHONY: fetch-deps xcframework build release clean
 
-# Build the xcframework locally
+# Fetch deps + build xcframework (full setup)
 build:
 	./scripts/fetch-deps.sh
+	./scripts/build-xcframework.sh
+
+# Initialize submodule and prefetch Zig build dependencies
+fetch-deps:
+	./scripts/fetch-deps.sh
+
+# Build the universal xcframework from Ghostty source
+xcframework:
 	./scripts/build-xcframework.sh
 
 # Clean built artifacts
@@ -63,7 +71,6 @@ _check-gh:
 	fi
 
 # Detect bump type from conventional commits since last tag
-# feat: -> minor, fix:/chore:/etc -> patch, BREAKING CHANGE or !: -> major
 _detect-bump:
 	@if [ -z "$(LAST_TAG)" ]; then \
 		echo "minor"; \

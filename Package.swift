@@ -21,7 +21,7 @@ let libghosttyTarget: Target = {
     } else {
         fatalError("""
             No libghostty.xcframework found locally and no release URL configured.
-            Run ./scripts/build-xcframework.sh to build locally, or use a tagged release.
+            Run `make xcframework` to build locally, or use a tagged release.
             """)
     }
 }()

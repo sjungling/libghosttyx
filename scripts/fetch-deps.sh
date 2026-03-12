@@ -70,5 +70,5 @@ cd "$GHOSTTY_DIR"
 zig build --fetch
 
 echo ""
-echo "All dependencies fetched. You can now build offline with:"
-echo "  ./scripts/build-xcframework.sh"
+echo "All dependencies fetched. You can now build with:"
+echo "  make xcframework"

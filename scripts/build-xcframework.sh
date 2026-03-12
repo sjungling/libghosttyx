@@ -64,7 +64,7 @@ else
 
     if [[ ! -f "$GHOSTTY_DIR/build.zig" ]]; then
         echo "Error: build.zig not found in $GHOSTTY_DIR"
-        echo "Run ./scripts/fetch-deps.sh first, or pass a Ghostty path."
+        echo "Run 'make fetch-deps' first, or pass a Ghostty path."
         exit 1
     fi
     echo "Using vendor/ghostty submodule"
