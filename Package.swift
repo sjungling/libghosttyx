@@ -1,6 +1,30 @@
 // swift-tools-version: 5.9
 
 import PackageDescription
+import Foundation
+
+// --- Remote binary configuration (updated by CI on release) ---
+let xcframeworkURL = ""
+let xcframeworkChecksum = ""
+
+// Use local xcframework if present (local development), otherwise fetch from GitHub Releases
+let useLocal = FileManager.default.fileExists(
+    atPath: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Frameworks/libghostty.xcframework").path
+)
+
+let libghosttyTarget: Target = {
+    if useLocal {
+        return .binaryTarget(name: "libghostty", path: "Frameworks/libghostty.xcframework")
+    } else if !xcframeworkURL.isEmpty {
+        return .binaryTarget(name: "libghostty", url: xcframeworkURL, checksum: xcframeworkChecksum)
+    } else {
+        fatalError("""
+            No libghostty.xcframework found locally and no release URL configured.
+            Run ./scripts/build-xcframework.sh to build locally, or use a tagged release.
+            """)
+    }
+}()
 
 let package = Package(
     name: "libghosttyx",
@@ -14,10 +38,7 @@ let package = Package(
         ),
     ],
     targets: [
-        .binaryTarget(
-            name: "libghostty",
-            path: "Frameworks/libghostty.xcframework"
-        ),
+        libghosttyTarget,
         .target(
             name: "libghosttyx",
             dependencies: ["libghostty"],
