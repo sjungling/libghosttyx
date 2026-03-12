@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version-file: .zig-version
+
+      - name: Fetch dependencies
+        run: make fetch-deps
+
+      - name: Build xcframework
+        run: make xcframework
+
+      - name: Package and compute checksum
+        id: package
+        run: |
+          cd Frameworks
+          zip -r -y libghostty.xcframework.zip libghostty.xcframework/
+          cd ..
+          checksum=$(swift package compute-checksum Frameworks/libghostty.xcframework.zip)
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+          echo "Checksum: $checksum"
+
+      - name: Update Package.swift
+        env:
+          TAG: ${{ github.ref_name }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          repo_url="https://github.com/${{ github.repository }}"
+          asset_url="$repo_url/releases/download/$TAG/libghostty.xcframework.zip"
+          sed -i '' "s|^let xcframeworkURL = .*|let xcframeworkURL = \"$asset_url\"|" Package.swift
+          sed -i '' "s|^let xcframeworkChecksum = .*|let xcframeworkChecksum = \"$CHECKSUM\"|" Package.swift
+          echo "URL:      $asset_url"
+          echo "Checksum: $CHECKSUM"
+          git diff Package.swift
+
+      - name: Update tag with Package.swift
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Package.swift
+          git commit -m "chore: update Package.swift for $TAG release"
+          git tag -f "$TAG"
+          git push origin main
+          git push --force origin "$TAG"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            Frameworks/libghostty.xcframework.zip \
+            --title "$TAG" \
+            --generate-notes

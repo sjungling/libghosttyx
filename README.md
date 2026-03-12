@@ -102,14 +102,23 @@ After updating, verify the Swift package still compiles with `swift build`.
 | `make fetch-deps` | Initialize submodule and prefetch Zig build dependencies |
 | `make xcframework` | Build the universal xcframework from Ghostty source |
 | `make clean` | Remove built xcframework and zip artifacts |
-| `make release` | Auto-detect version bump, build, tag, and publish a release |
-| `make release BUMP=minor` | Force a specific version bump (major, minor, patch) |
+
+## Releasing
+
+Releases are automated via GitHub Actions. To create a release, push a version tag:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The workflow builds the xcframework, updates `Package.swift` with the download URL and checksum, and creates a GitHub release with the artifact attached.
 
 ## Project Structure
 
 ```
 Package.swift             # Swift package manifest (macOS 13+)
-Makefile                  # Build, clean, and release targets
+Makefile                  # Build and clean targets
 Sources/libghosttyx/
   Core/                   # Engine, config, surface, input handling
   Views/                  # TerminalView (NSView), LocalProcessTerminalView

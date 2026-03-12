@@ -12,7 +12,7 @@ Sources/libghosttyx/
   SwiftUI/        - TerminalViewRepresentable (SwiftUI wrapper)
 Frameworks/       - Pre-built libghostty.xcframework (gitignored, must be built locally)
 vendor/ghostty/   - Ghostty source as a git submodule
-Makefile          - Build, clean, and release targets (public interface)
+Makefile          - Build and clean targets (public interface)
 scripts/          - fetch-deps.sh, build-xcframework.sh (implementation details)
 Examples/         - BasicTerminal (SPM), BasicTerminalApp (Xcode)
 ```
@@ -35,13 +35,13 @@ swift test
 
 # Clean built artifacts
 make clean
-
-# Cut a release (auto-detects semver bump from conventional commits)
-make release
-make release BUMP=minor  # Force a specific bump
 ```
 
 Use `GHOSTTY_DIR=/path/to/ghostty` to build against an external Ghostty checkout instead of the vendored submodule.
+
+## Releasing
+
+Releases are triggered by pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`). The GitHub Actions workflow builds the xcframework, updates Package.swift with the download URL and checksum, and creates a GitHub release.
 
 ## Updating Ghostty
 
@@ -64,7 +64,7 @@ swift build
 ## Key Conventions
 
 - The xcframework is NOT committed to git; it must be built locally
-- `Package.swift` has dual-mode resolution: uses local `Frameworks/libghostty.xcframework` if present, otherwise fetches from the GitHub Release URL (set during `make release`)
+- `Package.swift` has dual-mode resolution: uses local `Frameworks/libghostty.xcframework` if present, otherwise fetches from the GitHub Release URL (set by the release workflow)
 - The C library is imported via `import libghostty` in Swift files
 - `TerminalView` is the primary public API surface (NSView subclass)
 - macOS-only (`platforms: [.macOS(.v13)]`)
