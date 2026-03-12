@@ -134,6 +134,11 @@ public final class GhosttyEngine {
         ghostty_app_set_color_scheme(app, scheme)
     }
 
+    /// Convenience: notifies the engine of color scheme changes using a Bool.
+    public func setColorScheme(dark: Bool) {
+        setColorScheme(dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
     /// Notifies the engine that the keyboard layout has changed.
     public func keyboardChanged() {
         guard let app = app else { return }
