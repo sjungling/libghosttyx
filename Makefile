@@ -24,33 +24,35 @@ clean:
 #   make release          # auto-detect version bump from conventional commits
 #   make release BUMP=minor  # force a specific bump (major, minor, patch)
 release: _check-clean _check-gh build
-	$(eval LAST_TAG := $(shell git describe --tags --abbrev=0 2>/dev/null || echo ""))
-	$(eval BUMP ?= $(shell $(MAKE) -s _detect-bump LAST_TAG="$(LAST_TAG)"))
-	$(eval NEXT_VERSION := $(shell $(MAKE) -s _next-version LAST_TAG="$(LAST_TAG)" BUMP="$(BUMP)"))
-	@echo "==> Releasing $(NEXT_VERSION) ($(BUMP) bump from $(or $(LAST_TAG),none))"
-	@# Zip and checksum
-	cd Frameworks && zip -r -y libghostty.xcframework.zip libghostty.xcframework/
-	$(eval CHECKSUM := $(shell swift package compute-checksum Frameworks/libghostty.xcframework.zip))
-	$(eval REPO_URL := $(shell gh repo view --json url -q .url))
-	$(eval ASSET_URL := $(REPO_URL)/releases/download/$(NEXT_VERSION)/libghostty.xcframework.zip)
-	@# Update Package.swift with release URL and checksum
-	sed -i '' 's|^let xcframeworkURL = .*|let xcframeworkURL = "$(ASSET_URL)"|' Package.swift
-	sed -i '' 's|^let xcframeworkChecksum = .*|let xcframeworkChecksum = "$(CHECKSUM)"|' Package.swift
-	@# Commit, tag, and push
-	git add Package.swift
-	git commit -m "chore: update Package.swift for $(NEXT_VERSION) release"
-	git tag "$(NEXT_VERSION)"
-	git push origin main
-	git push origin "$(NEXT_VERSION)"
-	@# Create GitHub release with artifact
-	gh release create "$(NEXT_VERSION)" \
+	@last_tag=$$(git describe --tags --abbrev=0 2>/dev/null || echo ""); \
+	bump=$${BUMP:-$$($(MAKE) -s _detect-bump LAST_TAG="$$last_tag")}; \
+	next_version=$$($(MAKE) -s _next-version LAST_TAG="$$last_tag" BUMP="$$bump"); \
+	echo "==> Releasing $$next_version ($$bump bump from $${last_tag:-none})"; \
+	cd Frameworks && zip -r -y libghostty.xcframework.zip libghostty.xcframework/ && cd ..; \
+	checksum=$$(swift package compute-checksum Frameworks/libghostty.xcframework.zip); \
+	if [ -z "$$checksum" ]; then \
+		echo "Error: failed to compute checksum"; \
+		exit 1; \
+	fi; \
+	repo_url=$$(gh repo view --json url -q .url); \
+	asset_url="$$repo_url/releases/download/$$next_version/libghostty.xcframework.zip"; \
+	echo "  URL:      $$asset_url"; \
+	echo "  Checksum: $$checksum"; \
+	sed -i '' "s|^let xcframeworkURL = .*|let xcframeworkURL = \"$$asset_url\"|" Package.swift; \
+	sed -i '' "s|^let xcframeworkChecksum = .*|let xcframeworkChecksum = \"$$checksum\"|" Package.swift; \
+	git add Package.swift; \
+	git commit -m "chore: update Package.swift for $$next_version release"; \
+	git tag "$$next_version"; \
+	git push origin main; \
+	git push origin "$$next_version"; \
+	gh release create "$$next_version" \
 		Frameworks/libghostty.xcframework.zip \
-		--title "$(NEXT_VERSION)" \
+		--title "$$next_version" \
 		--generate-notes \
-		--notes-start-tag "$(LAST_TAG)"
-	@echo ""
-	@echo "==> Released $(NEXT_VERSION)"
-	@echo "    $(REPO_URL)/releases/tag/$(NEXT_VERSION)"
+		--notes-start-tag "$$last_tag"; \
+	echo ""; \
+	echo "==> Released $$next_version"; \
+	echo "    $$repo_url/releases/tag/$$next_version"
 
 # --- Internal targets ---
 
