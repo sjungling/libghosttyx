@@ -4,8 +4,8 @@ import PackageDescription
 import Foundation
 
 // --- Remote binary configuration (updated by CI on release) ---
-let xcframeworkURL = "https://github.com/sjungling/libghosttyx/releases/download/v0.3.0/libghostty.xcframework.zip"
-let xcframeworkChecksum = "1007c6ccedbf10c2b3279fa47207ad2f07b58ea87b867d0a2df2337ff9dc925a"
+let xcframeworkURL = "https://github.com/sjungling/libghosttyx/releases/download/v0.3.1/libghostty.xcframework.zip"
+let xcframeworkChecksum = "cf3e9d4b24b3621a43a1237fb7f1f0b7ab9469b5e2f11065cf21bda50bfb4946"
 
 // Use local xcframework if present (local development), otherwise fetch from GitHub Releases
 let useLocal = FileManager.default.fileExists(
