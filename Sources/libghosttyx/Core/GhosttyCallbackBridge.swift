@@ -11,7 +11,11 @@ enum GhosttyCallbackBridge {
     /// Guard against infinite recursion when calling `ghostty_surface_update_config`
     /// or `ghostty_app_update_config`. These can fire actions (CONFIG_CHANGE,
     /// RELOAD_CONFIG) that re-enter this callback, causing unbounded recursion.
-    /// Thread-safe because all callbacks execute synchronously on the main thread.
+    ///
+    /// Thread-safe because `actionCallback` always fires on the main thread:
+    /// `wakeupCallback` (called from any thread) dispatches `engine.tick()` to
+    /// `DispatchQueue.main`, and `ghostty_app_tick` invokes `action_cb` synchronously.
+    /// This invariant is enforced at runtime by `dispatchPrecondition` in `actionCallback`.
     private static var isUpdatingConfig = false
     /// Builds a `ghostty_runtime_config_s` wired to the given engine.
     @MainActor
@@ -48,6 +52,7 @@ enum GhosttyCallbackBridge {
     private static let actionCallback: @convention(c) (
         ghostty_app_t?, ghostty_target_s, ghostty_action_s
     ) -> Bool = { app, target, rawAction in
+        dispatchPrecondition(condition: .onQueue(.main))
         let action = GhosttyAction.from(rawAction)
 
         // For surface-targeted actions, resolve the TerminalView from the surface userdata
@@ -90,7 +95,7 @@ enum GhosttyCallbackBridge {
                 return true
             }
 
-            DispatchQueue.main.async {
+            MainActor.assumeIsolated {
                 view.handleAction(action)
             }
 
@@ -145,6 +150,9 @@ enum GhosttyCallbackBridge {
     }
 
     // MARK: - Clipboard Read
+    // Note: The clipboard and close callbacks below use `DispatchQueue.main.async`
+    // because they are called directly by libghostty from arbitrary threads — unlike
+    // `actionCallback`, which fires synchronously during `ghostty_app_tick` on main.
 
     /// Called when libghostty wants to read the clipboard.
     /// The surface userdata points to the TerminalView.
