@@ -48,6 +48,7 @@ enum GhosttyCallbackBridge {
     private static let actionCallback: @convention(c) (
         ghostty_app_t?, ghostty_target_s, ghostty_action_s
     ) -> Bool = { app, target, rawAction in
+        dispatchPrecondition(condition: .onQueue(.main))
         let action = GhosttyAction.from(rawAction)
 
         // For surface-targeted actions, resolve the TerminalView from the surface userdata
