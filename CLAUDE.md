@@ -63,6 +63,7 @@ swift build
 
 ## Key Conventions
 
+- **NEVER modify files under `vendor/ghostty/`** — this is a vendored git submodule. Changes to Ghostty must go upstream. Only modify our own Swift code in `Sources/libghosttyx/`.
 - The xcframework is NOT committed to git; it must be built locally
 - `Package.swift` has dual-mode resolution: uses local `Frameworks/libghostty.xcframework` if present, otherwise fetches from the GitHub Release URL (set by the release workflow)
 - The C library is imported via `import libghostty` in Swift files
