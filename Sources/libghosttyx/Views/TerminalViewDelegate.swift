@@ -27,6 +27,10 @@ public protocol TerminalViewDelegate: AnyObject {
     /// Called when the terminal requests opening a URL.
     func requestOpenLink(source: TerminalView, url: URL)
 
+    /// Called when the mouse hovers over or leaves an OSC 8 hyperlink.
+    /// - Parameter url: The hyperlink URI, or nil when the mouse leaves the link.
+    func mouseOverLink(source: TerminalView, url: String?)
+
     /// Called when the terminal's child process exits.
     func processExited(source: TerminalView, exitCode: UInt32, runtimeMs: UInt64)
 
@@ -55,6 +59,7 @@ public extension TerminalViewDelegate {
     func requestOpenLink(source: TerminalView, url: URL) {
         NSWorkspace.shared.open(url)
     }
+    func mouseOverLink(source: TerminalView, url: String?) {}
     func processExited(source: TerminalView, exitCode: UInt32, runtimeMs: UInt64) {}
     func surfaceClosed(source: TerminalView, processAlive: Bool) {}
     func desktopNotification(source: TerminalView, title: String, body: String) {}
