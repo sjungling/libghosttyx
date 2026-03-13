@@ -631,7 +631,7 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     // MARK: - Action Handling (from GhosttyCallbackBridge)
 
     /// Handles a ghostty action routed from the callback bridge.
-    func handleAction(_ action: GhosttyAction) {
+    @MainActor func handleAction(_ action: GhosttyAction) {
         switch action {
         case .setTitle(let newTitle):
             title = newTitle

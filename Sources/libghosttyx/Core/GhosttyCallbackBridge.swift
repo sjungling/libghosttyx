@@ -150,6 +150,9 @@ enum GhosttyCallbackBridge {
     }
 
     // MARK: - Clipboard Read
+    // Note: The clipboard and close callbacks below use `DispatchQueue.main.async`
+    // because they are called directly by libghostty from arbitrary threads — unlike
+    // `actionCallback`, which fires synchronously during `ghostty_app_tick` on main.
 
     /// Called when libghostty wants to read the clipboard.
     /// The surface userdata points to the TerminalView.
