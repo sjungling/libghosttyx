@@ -91,7 +91,7 @@ enum GhosttyCallbackBridge {
                 return true
             }
 
-            DispatchQueue.main.async {
+            MainActor.assumeIsolated {
                 view.handleAction(action)
             }
 
