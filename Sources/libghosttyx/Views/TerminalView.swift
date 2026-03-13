@@ -61,6 +61,9 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     /// Current working directory.
     public private(set) var workingDirectory: String?
 
+    /// The OSC 8 hyperlink URL currently under the mouse cursor, or nil.
+    public private(set) var currentHoverLink: String?
+
     /// Marked text for IME composition.
     private var markedTextStorage: NSMutableAttributedString = .init()
     private var _markedRange: NSRange = .init(location: NSNotFound, length: 0)
@@ -672,6 +675,10 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
         case .desktopNotification(let title, let body):
             delegate?.desktopNotification(source: self, title: title, body: body)
+
+        case .mouseOverLink(let url):
+            currentHoverLink = url
+            delegate?.mouseOverLink(source: self, url: url)
 
         default:
             break
