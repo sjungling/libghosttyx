@@ -11,7 +11,11 @@ enum GhosttyCallbackBridge {
     /// Guard against infinite recursion when calling `ghostty_surface_update_config`
     /// or `ghostty_app_update_config`. These can fire actions (CONFIG_CHANGE,
     /// RELOAD_CONFIG) that re-enter this callback, causing unbounded recursion.
-    /// Thread-safe because all callbacks execute synchronously on the main thread.
+    ///
+    /// Thread-safe because `actionCallback` always fires on the main thread:
+    /// `wakeupCallback` (called from any thread) dispatches `engine.tick()` to
+    /// `DispatchQueue.main`, and `ghostty_app_tick` invokes `action_cb` synchronously.
+    /// This invariant is enforced at runtime by `dispatchPrecondition` in `actionCallback`.
     private static var isUpdatingConfig = false
     /// Builds a `ghostty_runtime_config_s` wired to the given engine.
     @MainActor
