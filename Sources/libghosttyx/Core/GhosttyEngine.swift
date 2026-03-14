@@ -139,6 +139,20 @@ public final class GhosttyEngine {
         setColorScheme(dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
+    /// Reloads configuration from a config file, updating all surfaces.
+    ///
+    /// Creates a fresh `GhosttyConfig`, loads the specified file, finalizes it,
+    /// and pushes it to the app via `ghostty_app_update_config`. This causes all
+    /// surfaces to pick up changes to colors, fonts, and other config values.
+    public func reloadConfig(from path: String) {
+        guard let app else { return }
+        guard let cfg = try? GhosttyConfig() else { return }
+        cfg.loadFile(path)
+        cfg.finalize()
+        guard let rawConfig = cfg.rawConfig else { return }
+        ghostty_app_update_config(app, rawConfig)
+    }
+
     /// Notifies the engine that the keyboard layout has changed.
     public func keyboardChanged() {
         guard let app = app else { return }
