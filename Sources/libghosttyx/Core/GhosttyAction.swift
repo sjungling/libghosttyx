@@ -7,6 +7,7 @@ import libghostty
 /// as associated values for type-safe consumption by delegates.
 public enum GhosttyAction {
     case setTitle(String)
+    case setTabTitle(String)
     case bell
     case cellSize(width: UInt32, height: UInt32)
     case scrollbar(total: UInt64, offset: UInt64, length: UInt64)
@@ -48,6 +49,10 @@ public enum GhosttyAction {
         case GHOSTTY_ACTION_SET_TITLE:
             let title = raw.action.set_title.title.map { String(cString: $0) } ?? ""
             return .setTitle(title)
+
+        case GHOSTTY_ACTION_SET_TAB_TITLE:
+            let title = raw.action.set_tab_title.title.map { String(cString: $0) } ?? ""
+            return .setTabTitle(title)
 
         case GHOSTTY_ACTION_RING_BELL:
             return .bell

@@ -102,6 +102,7 @@ enum GhosttyCallbackBridge {
             // Surface-level actions we handle
             switch rawAction.tag {
             case GHOSTTY_ACTION_SET_TITLE,
+                 GHOSTTY_ACTION_SET_TAB_TITLE,
                  GHOSTTY_ACTION_RING_BELL,
                  GHOSTTY_ACTION_CELL_SIZE,
                  GHOSTTY_ACTION_SCROLLBAR,
@@ -158,8 +159,8 @@ enum GhosttyCallbackBridge {
     /// The surface userdata points to the TerminalView.
     private static let readClipboardCallback: @convention(c) (
         UnsafeMutableRawPointer?, ghostty_clipboard_e, UnsafeMutableRawPointer?
-    ) -> Void = { userdata, clipboardType, statePtr in
-        guard let userdata = userdata else { return }
+    ) -> Bool = { userdata, clipboardType, statePtr in
+        guard let userdata = userdata else { return false }
         let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
 
         DispatchQueue.main.async {
@@ -176,6 +177,7 @@ enum GhosttyCallbackBridge {
                 confirmed: true
             )
         }
+        return true
     }
 
     // MARK: - Confirm Clipboard Read
