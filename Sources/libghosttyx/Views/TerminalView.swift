@@ -637,6 +637,9 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
             title = newTitle
             delegate?.setTerminalTitle(source: self, title: newTitle)
 
+        case .setTabTitle(let newTitle):
+            delegate?.setTabTitle(source: self, title: newTitle)
+
         case .bell:
             delegate?.bell(source: self)
 

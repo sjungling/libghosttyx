@@ -9,6 +9,9 @@ public protocol TerminalViewDelegate: AnyObject {
     /// Called when the terminal title changes (via escape sequence).
     func setTerminalTitle(source: TerminalView, title: String)
 
+    /// Called when the terminal tab title changes (via `set_tab_title` binding action).
+    func setTabTitle(source: TerminalView, title: String)
+
     /// Called when the terminal rings the bell.
     func bell(source: TerminalView)
 
@@ -51,6 +54,7 @@ public protocol TerminalViewDelegate: AnyObject {
 
 public extension TerminalViewDelegate {
     func setTerminalTitle(source: TerminalView, title: String) {}
+    func setTabTitle(source: TerminalView, title: String) {}
     func bell(source: TerminalView) { NSSound.beep() }
     func sizeChanged(source: TerminalView, newCols: UInt16, newRows: UInt16) {}
     func scrolled(source: TerminalView, position: (total: UInt64, offset: UInt64, length: UInt64)) {}
