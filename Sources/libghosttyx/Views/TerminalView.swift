@@ -506,16 +506,19 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     }
 
     /// Converts AppKit coordinates (origin bottom-left) to ghostty coordinates (origin top-left).
+    ///
+    /// Returns point coordinates (not pixels). The ghostty surface internally
+    /// converts to pixels using the content scale set via `setContentScale()`.
+    /// This matches the upstream Ghostty macOS app's `SurfaceView_AppKit`.
     private func convertToGhosttyCoords(_ event: NSEvent) -> NSPoint {
         let localPoint = convert(event.locationInWindow, from: nil)
-        let scale = window?.backingScaleFactor ?? 1.0
 
         // Flip Y: AppKit is bottom-left origin, ghostty expects top-left
         let flippedY = bounds.height - localPoint.y
 
         return NSPoint(
-            x: localPoint.x * scale,
-            y: flippedY * scale
+            x: localPoint.x,
+            y: flippedY
         )
     }
 
