@@ -106,13 +106,44 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     }
 
     deinit {
+        // Capture locals before any writes so we don't touch main-actor
+        // state from the nonisolated deinit context.
         if let link = displayLink {
             CVDisplayLinkStop(link)
         }
-        // Release the retained WeakBox that was passed to CVDisplayLink.
         if let ptr = displayLinkBoxPtr {
             Unmanaged<WeakBox<TerminalView>>.fromOpaque(ptr).release()
         }
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - Teardown
+
+    /// Stops rendering, releases the ghostty surface, and detaches from
+    /// notification observers.
+    ///
+    /// Use this when embedding the view in a container (e.g. SwiftUI
+    /// `NSViewRepresentable`) that may keep the view alive longer than
+    /// you need it — for example, `WindowGroup` retains scene state for
+    /// tabbed windows even after the tab closes. Calling `close()` frees
+    /// the expensive resources (display link, Metal surface, PTY) even if
+    /// the NSView itself is still reachable from the outer view tree.
+    ///
+    /// Safe to call multiple times. After calling `close()`, the view
+    /// cannot be restarted — create a new instance instead.
+    public func close() {
+        if let link = displayLink {
+            CVDisplayLinkStop(link)
+            self.displayLink = nil
+        }
+        if let ptr = displayLinkBoxPtr {
+            Unmanaged<WeakBox<TerminalView>>.fromOpaque(ptr).release()
+            self.displayLinkBoxPtr = nil
+        }
+        // Dropping the surface runs GhosttySurface.deinit which calls
+        // ghostty_surface_free, releasing the PTY, renderer, and child
+        // process group.
+        self.surface = nil
         NotificationCenter.default.removeObserver(self)
     }
 
