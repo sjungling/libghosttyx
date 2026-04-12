@@ -319,7 +319,38 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     open override var acceptsFirstResponder: Bool { true }
 
     open override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        return false
+        guard event.type == .keyDown else { return false }
+        guard let surface = surface else { return false }
+
+        // Check if this key event is a Ghostty binding. If it is, route it
+        // through keyDown so Ghostty handles it directly (e.g. Cmd+V →
+        // paste_from_clipboard, Cmd+C → copy_to_clipboard). Without this,
+        // returning false here causes the macOS menu to intercept those
+        // shortcuts and fire paste:/copy: on the responder chain. AppKit's
+        // NSResponder paste: falls back to sendText: outside a keyDown
+        // context, bypassing Ghostty entirely and producing unexpected behavior.
+        var keyEvent = event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)
+        let (isBinding, _) = (event.characters ?? "").withCString { ptr in
+            keyEvent.text = ptr
+            return surface.keyIsBinding(keyEvent)
+        }
+        guard isBinding else { return false }
+
+        // Don't intercept app-level shortcuts — let the macOS menu handle them.
+        // Ghostty has default bindings for quit (Cmd+Q), close (Cmd+W),
+        // new-window (Cmd+N), new-tab (Cmd+T), and open-config (Cmd+,).
+        // Returning false for these lets the macOS menu fire the appropriate
+        // app actions (NSApp terminate, window close, etc.) rather than routing
+        // through Ghostty's action callback which the host returns false for.
+        // Also exclude Cmd+H (hide) and Cmd+M (minimize), which are system shortcuts.
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let char = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        if flags == .command && ["q", "w", "n", "t", ",", "h", "m"].contains(char) {
+            return false
+        }
+
+        keyDown(with: event)
+        return true
     }
 
     open override func becomeFirstResponder() -> Bool {
