@@ -695,6 +695,21 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
     // MARK: - Action Handling (from GhosttyCallbackBridge)
 
+    /// Reads the clipboard and completes the pending request from libghostty.
+    ///
+    /// Called by `GhosttyCallbackBridge.readClipboardCallback` on the main thread.
+    /// Overridable so tests can observe and intercept clipboard completion without
+    /// a real Ghostty surface.
+    @MainActor func handleClipboardRequest(
+        type: ghostty_clipboard_e,
+        state: UnsafeMutableRawPointer?
+    ) {
+        let content: String? = type == GHOSTTY_CLIPBOARD_STANDARD
+            ? NSPasteboard.general.string(forType: .string)
+            : nil
+        surface?.completeClipboardRequest(data: content, state: state, confirmed: true)
+    }
+
     /// Handles a ghostty action routed from the callback bridge.
     @MainActor func handleAction(_ action: GhosttyAction) {
         switch action {

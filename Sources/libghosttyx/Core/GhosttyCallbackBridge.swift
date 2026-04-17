@@ -151,9 +151,6 @@ enum GhosttyCallbackBridge {
     }
 
     // MARK: - Clipboard Read
-    // Note: The clipboard and close callbacks below use `DispatchQueue.main.async`
-    // because they are called directly by libghostty from arbitrary threads — unlike
-    // `actionCallback`, which fires synchronously during `ghostty_app_tick` on main.
 
     /// Called when libghostty wants to read the clipboard.
     /// The surface userdata points to the TerminalView.
@@ -163,19 +160,19 @@ enum GhosttyCallbackBridge {
         guard let userdata = userdata else { return false }
         let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
 
-        DispatchQueue.main.async {
-            let content: String?
-            if clipboardType == GHOSTTY_CLIPBOARD_STANDARD {
-                content = NSPasteboard.general.string(forType: .string)
-            } else {
-                content = nil
+        // Complete synchronously when already on the main thread (the common case:
+        // ghostty_surface_key is called from the main thread, so this callback fires
+        // on the main thread too). Dispatching async here defers the completion past
+        // the current run-loop turn, which leaks state_ptr if the surface is freed
+        // before the block executes and causes paste to silently fail.
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                view.handleClipboardRequest(type: clipboardType, state: statePtr)
             }
-
-            view.surface?.completeClipboardRequest(
-                data: content,
-                state: statePtr,
-                confirmed: true
-            )
+        } else {
+            DispatchQueue.main.async {
+                view.handleClipboardRequest(type: clipboardType, state: statePtr)
+            }
         }
         return true
     }
