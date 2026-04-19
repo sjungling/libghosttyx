@@ -163,6 +163,27 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     surface?.setOcclusion(occluded)
   }
 
+  /// Stops the display link, pausing Metal rendering without destroying the surface.
+  ///
+  /// Call this when removing the view from the window hierarchy without intending
+  /// to tear it down (e.g. parking in a view cache to preserve scroll history).
+  /// The surface, PTY, and scroll buffer remain intact — only the 60 Hz render
+  /// loop is stopped. Call `resumeDisplayLink()` to restart rendering when the
+  /// view is re-attached.
+  public func pauseDisplayLink() {
+    guard let link = displayLink else { return }
+    CVDisplayLinkStop(link)
+  }
+
+  /// Restarts the display link after `pauseDisplayLink()`.
+  ///
+  /// Call this when re-inserting a previously-paused view into the window
+  /// hierarchy. No-op if the display link was never started or already running.
+  public func resumeDisplayLink() {
+    guard let link = displayLink else { return }
+    CVDisplayLinkStart(link)
+  }
+
   // MARK: - Starting the Terminal
 
   /// Starts the terminal with the given configuration.
