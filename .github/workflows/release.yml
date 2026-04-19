@@ -21,10 +21,14 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
 
+      - name: Read Zig version
+        id: zig-version
+        run: echo "version=$(cat .zig-version)" >> "$GITHUB_OUTPUT"
+
       - name: Install Zig
         uses: mlugg/setup-zig@v2
         with:
-          version-file: .zig-version
+          version: ${{ steps.zig-version.outputs.version }}
 
       - name: Fetch dependencies
         run: make fetch-deps
