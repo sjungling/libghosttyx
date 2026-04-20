@@ -323,7 +323,12 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
   open override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
 
-    if let window = window {
+    if window == nil {
+      // NSCursor.hide() is process-wide and reference-counted with no automatic
+      // reset. Unhide here so a hidden cursor doesn't persist for the entire app
+      // after this view leaves the window.
+      NSCursor.unhide()
+    } else if let window = window {
       surface?.setContentScale(window.backingScaleFactor)
       updateSurfaceSize()
       updateDisplayID()
@@ -816,13 +821,14 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
       delegate?.mouseVisibilityChanged(source: self, visible: visible)
 
     case .secureInput(let state):
+      // TOGGLE is an app-level action; at surface level only ON/OFF are expected.
       delegate?.secureInputChanged(source: self, enabled: state == GHOSTTY_SECURE_INPUT_ON)
 
-    case .sizeLimit(let minW, let minH, let maxW, let maxH):
-      delegate?.sizeLimitChanged(source: self, minCols: minW, minRows: minH, maxCols: maxW, maxRows: maxH)
+    case .sizeLimit(let minWidth, let minHeight, let maxWidth, let maxHeight):
+      delegate?.sizeLimitChanged(source: self, minCols: minWidth, minRows: minHeight, maxCols: maxWidth, maxRows: maxHeight)
 
-    case .initialSize(let w, let h):
-      delegate?.initialSizeRequested(source: self, cols: w, rows: h)
+    case .initialSize(let width, let height):
+      delegate?.initialSizeRequested(source: self, cols: width, rows: height)
 
     case .progressReport(let state, let progress):
       delegate?.progressReported(source: self, state: state, progress: progress)
