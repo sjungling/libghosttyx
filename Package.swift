@@ -45,6 +45,10 @@ let package = Package(
       name: "libghosttyx",
       dependencies: ["libghostty"],
       path: "Sources/libghosttyx",
+      resources: [
+        .copy("ghostty"),
+        .copy("terminfo"),
+      ],
       linkerSettings: [
         .linkedFramework("AppKit"),
         .linkedFramework("Carbon"),
