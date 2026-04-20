@@ -1,5 +1,6 @@
 import AppKit
 import libghostty
+import os
 
 /// An NSView that hosts a ghostty terminal surface.
 ///
@@ -809,7 +810,30 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
       currentHoverLink = url
       delegate?.mouseOverLink(source: self, url: url)
 
+    case .mouseVisibility(let visibility):
+      let visible = visibility == GHOSTTY_MOUSE_VISIBLE
+      if visible { NSCursor.unhide() } else { NSCursor.hide() }
+      delegate?.mouseVisibilityChanged(source: self, visible: visible)
+
+    case .secureInput(let state):
+      delegate?.secureInputChanged(source: self, enabled: state == GHOSTTY_SECURE_INPUT_ON)
+
+    case .sizeLimit(let minW, let minH, let maxW, let maxH):
+      delegate?.sizeLimitChanged(source: self, minCols: minW, minRows: minH, maxCols: maxW, maxRows: maxH)
+
+    case .initialSize(let w, let h):
+      delegate?.initialSizeRequested(source: self, cols: w, rows: h)
+
+    case .progressReport(let state, let progress):
+      delegate?.progressReported(source: self, state: state, progress: progress)
+
+    case .rendererHealth(let health):
+      delegate?.rendererHealthChanged(source: self, health: health)
+
     default:
+      #if DEBUG
+      os_log(.debug, "TerminalView: unhandled action %{public}@", String(describing: action))
+      #endif
       break
     }
   }
