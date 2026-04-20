@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release (e.g., v0.3.18)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,9 +15,24 @@ jobs:
   release:
     runs-on: macos-15
     steps:
-      - name: Checkout
+      - name: Validate version input
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.version }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$TAG' — expected vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          if gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Bump the version instead of retrying."
+            exit 1
+          fi
+
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -48,36 +66,96 @@ jobs:
 
       - name: Update Package.swift
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
+          REPO: ${{ github.repository }}
         run: |
-          repo_url="https://github.com/${{ github.repository }}"
-          asset_url="$repo_url/releases/download/$TAG/libghostty.xcframework.zip"
-          sed -i '' "s|^let xcframeworkURL = .*|let xcframeworkURL = \"$asset_url\"|" Package.swift
-          sed -i '' "s|^let xcframeworkChecksum = .*|let xcframeworkChecksum = \"$CHECKSUM\"|" Package.swift
+          asset_url="https://github.com/$REPO/releases/download/$TAG/libghostty.xcframework.zip"
+          # Anchor sed on trailing `// libghosttyx-*` comments. See Package.swift
+          # header — anchors must stay on the same line as the value literal.
+          sed -i '' -E "s|^.*// libghosttyx-url\$|let xcframeworkURL = \"$asset_url\"  // libghosttyx-url|" Package.swift
+          sed -i '' -E "s|^.*// libghosttyx-checksum\$|let xcframeworkChecksum = \"$CHECKSUM\"  // libghosttyx-checksum|" Package.swift
+
+          if ! grep -qF "\"$asset_url\"  // libghosttyx-url" Package.swift; then
+            echo "::error::Failed to update xcframeworkURL — anchor '// libghosttyx-url' not found"
+            grep -n 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
+          if ! grep -qF "\"$CHECKSUM\"  // libghosttyx-checksum" Package.swift; then
+            echo "::error::Failed to update xcframeworkChecksum — anchor '// libghosttyx-checksum' not found"
+            grep -n 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
           echo "URL:      $asset_url"
           echo "Checksum: $CHECKSUM"
           git diff Package.swift
 
-      - name: Update tag with Package.swift
+      - name: Commit, tag, and push
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout main
           git add Package.swift
-          git commit -m "chore: update Package.swift for $TAG release"
-          git tag -f "$TAG"
+          git commit -m "chore: release $TAG"
+          # Tag is created fresh on the just-committed release commit; never
+          # force-pushed. If this push fails, the release is aborted cleanly.
+          git tag "$TAG"
           git push origin main
-          git push --force origin "$TAG"
+          git push origin "$TAG"
 
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
         run: |
-          gh release create "$TAG" \
-            Frameworks/libghostty.xcframework.zip \
-            --title "$TAG" \
-            --generate-notes
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading asset with --clobber"
+            gh release upload "$TAG" Frameworks/libghostty.xcframework.zip --clobber
+          else
+            gh release create "$TAG" \
+              Frameworks/libghostty.xcframework.zip \
+              --title "$TAG" \
+              --generate-notes
+          fi
+
+      - name: Verify published release matches Package.swift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.version }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          REPO: ${{ github.repository }}
+        run: |
+          asset_url="https://github.com/$REPO/releases/download/$TAG/libghostty.xcframework.zip"
+          echo "Verifying asset at $asset_url"
+          for i in 1 2 3 4 5; do
+            http_code=$(curl -sLo /tmp/asset.zip -w '%{http_code}' "$asset_url")
+            if [ "$http_code" = "200" ] && [ -s /tmp/asset.zip ]; then
+              break
+            fi
+            echo "Attempt $i: HTTP $http_code, retrying in 5s..."
+            rm -f /tmp/asset.zip
+            sleep 5
+          done
+          if [ ! -s /tmp/asset.zip ]; then
+            echo "::error::Could not download release asset from $asset_url"
+            exit 1
+          fi
+          downloaded_sha=$(shasum -a 256 /tmp/asset.zip | awk '{print $1}')
+          echo "Downloaded SHA: $downloaded_sha"
+          echo "Computed SHA:   $CHECKSUM"
+          if [ "$downloaded_sha" != "$CHECKSUM" ]; then
+            echo "::error::Downloaded asset SHA does not match computed checksum"
+            exit 1
+          fi
+          if ! grep -qF "\"$asset_url\"" Package.swift; then
+            echo "::error::Package.swift does not reference $asset_url"
+            grep -nE 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
+          if ! grep -qF "\"$CHECKSUM\"" Package.swift; then
+            echo "::error::Package.swift does not reference checksum $CHECKSUM"
+            grep -nE 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
+          echo "Release asset SHA and Package.swift both match — $TAG is publishable"

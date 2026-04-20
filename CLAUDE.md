@@ -41,7 +41,21 @@ Use `GHOSTTY_DIR=/path/to/ghostty` to build against an external Ghostty checkout
 
 ## Releasing
 
-Releases are triggered by pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`). The GitHub Actions workflow builds the xcframework, updates Package.swift with the download URL and checksum, and creates a GitHub release.
+Releases are triggered **manually** via `workflow_dispatch`, not by pushing a tag. From the GitHub Actions UI (or `gh workflow run release.yml -f version=v0.3.18`), the workflow:
+
+1. Validates the version string and that the tag doesn't already exist
+2. Builds the xcframework from `main` and computes its SHA-256
+3. Rewrites `Package.swift` via sed anchored on the trailing `// libghosttyx-url` and `// libghosttyx-checksum` comments
+4. Commits `chore: release $TAG` to `main`, creates the tag **on that commit**, pushes both
+5. Creates the GitHub Release and uploads the xcframework zip
+6. Downloads the published asset back and asserts its SHA matches both the computed checksum and what's in `Package.swift` — the build fails loudly if anything drifts
+
+### Release rules (invariants)
+
+- **NEVER force-push tags.** Tags must point at the release commit from creation. The workflow creates the tag *after* the Package.swift update is committed; it never moves an existing tag. If a release needs to be redone, bump the patch version instead of retagging.
+- **NEVER hand-edit `xcframeworkURL` or `xcframeworkChecksum` in `Package.swift`.** CI owns those lines. The trailing `// libghosttyx-url` / `// libghosttyx-checksum` anchors must stay on the same line as their values — the release workflow's sed substitution finds them by those anchors.
+- **`Package.swift` carries `// swift-format-ignore-file`** to prevent formatters from rewrapping the anchor lines. Do not remove that directive.
+- **Broken releases stay broken.** If a published release's `Package.swift` and asset disagree, do not attempt to fix the existing tag — tag a new patch version.
 
 ## Updating Ghostty
 

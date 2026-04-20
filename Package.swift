@@ -1,12 +1,17 @@
 // swift-tools-version: 5.9
+// swift-format-ignore-file
+//
+// This manifest is rewritten by the release workflow. Do not reformat — the
+// trailing `// libghosttyx-url` and `// libghosttyx-checksum` anchors MUST
+// stay on the same line as their value literals for CI's sed substitution to
+// find them. If you edit this file, preserve those anchors exactly.
 
 import Foundation
 import PackageDescription
 
 // --- Remote binary configuration (updated by CI on release) ---
-let xcframeworkURL =
-  "https://github.com/sjungling/libghosttyx/releases/download/v0.3.13/libghostty.xcframework.zip"
-let xcframeworkChecksum = "e6a00911fe2fa01529d68c96b80a1cfc4ca66e6f3951412b78c59286385034d2"
+let xcframeworkURL = "https://github.com/sjungling/libghosttyx/releases/download/v0.3.13/libghostty.xcframework.zip"  // libghosttyx-url
+let xcframeworkChecksum = "e98c329eb13491503a8999ee19e813b809eb82cb8ff9c4603010e5ce5494be70"  // libghosttyx-checksum
 
 // Use local xcframework if present (local development), otherwise fetch from GitHub Releases
 let useLocal = FileManager.default.fileExists(
