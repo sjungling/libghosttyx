@@ -486,16 +486,15 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     key_ev.composing = composing
 
     // Only send text if it's not a control character (ghostty handles those internally)
-    var result = false
     if let text, !text.isEmpty,
       let codepoint = text.utf8.first, codepoint >= 0x20
     {
       text.withCString { ptr in
         key_ev.text = ptr
-        result = surface.sendKey(key_ev)
+        surface.sendKey(key_ev)
       }
     } else {
-      result = surface.sendKey(key_ev)
+      surface.sendKey(key_ev)
     }
 
   }
