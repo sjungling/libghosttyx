@@ -1,4 +1,5 @@
 import AppKit
+import libghostty
 
 /// Protocol for receiving callbacks from a `TerminalView`.
 ///
@@ -48,6 +49,24 @@ public protocol TerminalViewDelegate: AnyObject {
 
     /// Called when the terminal color scheme changes.
     func colorChanged(source: TerminalView, kind: Int, r: UInt8, g: UInt8, b: UInt8)
+
+    /// Called when the terminal requests the mouse cursor be shown or hidden.
+    func mouseVisibilityChanged(source: TerminalView, visible: Bool)
+
+    /// Called when secure input mode changes (e.g. a password prompt via sudo).
+    func secureInputChanged(source: TerminalView, enabled: Bool)
+
+    /// Called when Ghostty sets size constraints for the terminal.
+    func sizeLimitChanged(source: TerminalView, minCols: UInt32, minRows: UInt32, maxCols: UInt32, maxRows: UInt32)
+
+    /// Called when Ghostty requests an initial terminal size.
+    func initialSizeRequested(source: TerminalView, cols: UInt32, rows: UInt32)
+
+    /// Called when a foreground command reports progress.
+    func progressReported(source: TerminalView, state: ghostty_action_progress_report_state_e, progress: Int8)
+
+    /// Called when the GPU renderer health changes.
+    func rendererHealthChanged(source: TerminalView, health: ghostty_action_renderer_health_e)
 }
 
 // MARK: - Default Implementations
@@ -69,4 +88,10 @@ public extension TerminalViewDelegate {
     func desktopNotification(source: TerminalView, title: String, body: String) {}
     func mouseShapeChanged(source: TerminalView, shape: Int) {}
     func colorChanged(source: TerminalView, kind: Int, r: UInt8, g: UInt8, b: UInt8) {}
+    func mouseVisibilityChanged(source: TerminalView, visible: Bool) {}
+    func secureInputChanged(source: TerminalView, enabled: Bool) {}
+    func sizeLimitChanged(source: TerminalView, minCols: UInt32, minRows: UInt32, maxCols: UInt32, maxRows: UInt32) {}
+    func initialSizeRequested(source: TerminalView, cols: UInt32, rows: UInt32) {}
+    func progressReported(source: TerminalView, state: ghostty_action_progress_report_state_e, progress: Int8) {}
+    func rendererHealthChanged(source: TerminalView, health: ghostty_action_renderer_health_e) {}
 }

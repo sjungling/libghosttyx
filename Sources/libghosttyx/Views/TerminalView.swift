@@ -1,5 +1,6 @@
 import AppKit
 import libghostty
+import os
 
 /// An NSView that hosts a ghostty terminal surface.
 ///
@@ -34,7 +35,7 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
   /// Returns the text content of a single viewport row (0-indexed from top).
   public func readLineText(row: Int) -> String? {
-    guard let size = surface?.size else { return nil }
+    guard row >= 0, let size = surface?.size, row < Int(size.rows) else { return nil }
     let sel = ghostty_selection_s(
       top_left: ghostty_point_s(
         tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row)),
@@ -322,7 +323,20 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
   open override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
 
-    if let window = window {
+    // Remove any previously registered window-specific observers before
+    // re-registering for the new window, preventing duplicate callbacks
+    // when the view moves between windows.
+    NotificationCenter.default.removeObserver(
+      self, name: NSWindow.didChangeBackingPropertiesNotification, object: nil)
+    NotificationCenter.default.removeObserver(
+      self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
+
+    if window == nil {
+      // NSCursor.hide() is process-wide and reference-counted with no automatic
+      // reset. Unhide here so a hidden cursor doesn't persist for the entire app
+      // after this view leaves the window.
+      NSCursor.unhide()
+    } else if let window = window {
       surface?.setContentScale(window.backingScaleFactor)
       updateSurfaceSize()
       updateDisplayID()
@@ -472,16 +486,15 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     key_ev.composing = composing
 
     // Only send text if it's not a control character (ghostty handles those internally)
-    var result = false
     if let text, !text.isEmpty,
       let codepoint = text.utf8.first, codepoint >= 0x20
     {
       text.withCString { ptr in
         key_ev.text = ptr
-        result = surface.sendKey(key_ev)
+        surface.sendKey(key_ev)
       }
     } else {
-      result = surface.sendKey(key_ev)
+      surface.sendKey(key_ev)
     }
 
   }
@@ -809,7 +822,31 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
       currentHoverLink = url
       delegate?.mouseOverLink(source: self, url: url)
 
+    case .mouseVisibility(let visibility):
+      let visible = visibility == GHOSTTY_MOUSE_VISIBLE
+      if visible { NSCursor.unhide() } else { NSCursor.hide() }
+      delegate?.mouseVisibilityChanged(source: self, visible: visible)
+
+    case .secureInput(let state):
+      // TOGGLE is an app-level action; at surface level only ON/OFF are expected.
+      delegate?.secureInputChanged(source: self, enabled: state == GHOSTTY_SECURE_INPUT_ON)
+
+    case .sizeLimit(let minWidth, let minHeight, let maxWidth, let maxHeight):
+      delegate?.sizeLimitChanged(source: self, minCols: minWidth, minRows: minHeight, maxCols: maxWidth, maxRows: maxHeight)
+
+    case .initialSize(let width, let height):
+      delegate?.initialSizeRequested(source: self, cols: width, rows: height)
+
+    case .progressReport(let state, let progress):
+      delegate?.progressReported(source: self, state: state, progress: progress)
+
+    case .rendererHealth(let health):
+      delegate?.rendererHealthChanged(source: self, health: health)
+
     default:
+      #if DEBUG
+      os_log(.debug, "TerminalView: unhandled action %{public}@", String(describing: action))
+      #endif
       break
     }
   }
