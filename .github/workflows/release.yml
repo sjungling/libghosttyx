@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release (e.g., v0.3.18)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,9 +15,24 @@ jobs:
   release:
     runs-on: macos-15
     steps:
-      - name: Checkout
+      - name: Validate version input
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.version }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$TAG' — expected vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          if gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Bump the version instead of retrying."
+            exit 1
+          fi
+
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -48,52 +66,48 @@ jobs:
 
       - name: Update Package.swift
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
           REPO: ${{ github.repository }}
         run: |
-          python3 <<'PY'
-          import os, re, sys
-          asset_url = f"https://github.com/{os.environ['REPO']}/releases/download/{os.environ['TAG']}/libghostty.xcframework.zip"
-          checksum = os.environ['CHECKSUM']
-          content = open('Package.swift').read()
-          content, url_n = re.subn(
-              r'let\s+xcframeworkURL\s*=\s*"[^"]*"',
-              f'let xcframeworkURL = "{asset_url}"',
-              content,
-              count=1,
-          )
-          content, sum_n = re.subn(
-              r'let\s+xcframeworkChecksum\s*=\s*"[^"]*"',
-              f'let xcframeworkChecksum = "{checksum}"',
-              content,
-              count=1,
-          )
-          if url_n != 1 or sum_n != 1:
-              sys.exit(f"expected 1 replacement each; got url={url_n} checksum={sum_n}")
-          open('Package.swift', 'w').write(content)
-          print(f"URL:      {asset_url}")
-          print(f"Checksum: {checksum}")
-          PY
+          asset_url="https://github.com/$REPO/releases/download/$TAG/libghostty.xcframework.zip"
+          # Anchor sed on trailing `// libghosttyx-*` comments. See Package.swift
+          # header — anchors must stay on the same line as the value literal.
+          sed -i '' -E "s|^.*// libghosttyx-url\$|let xcframeworkURL = \"$asset_url\"  // libghosttyx-url|" Package.swift
+          sed -i '' -E "s|^.*// libghosttyx-checksum\$|let xcframeworkChecksum = \"$CHECKSUM\"  // libghosttyx-checksum|" Package.swift
+
+          if ! grep -qF "\"$asset_url\"  // libghosttyx-url" Package.swift; then
+            echo "::error::Failed to update xcframeworkURL — anchor '// libghosttyx-url' not found"
+            grep -n 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
+          if ! grep -qF "\"$CHECKSUM\"  // libghosttyx-checksum" Package.swift; then
+            echo "::error::Failed to update xcframeworkChecksum — anchor '// libghosttyx-checksum' not found"
+            grep -n 'libghosttyx-' Package.swift || true
+            exit 1
+          fi
+          echo "URL:      $asset_url"
+          echo "Checksum: $CHECKSUM"
           git diff Package.swift
 
-      - name: Update tag with Package.swift
+      - name: Commit, tag, and push
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout main
           git add Package.swift
-          git commit -m "chore: update Package.swift for $TAG release"
-          git tag -f "$TAG"
+          git commit -m "chore: release $TAG"
+          # Tag is created fresh on the just-committed release commit; never
+          # force-pushed. If this push fails, the release is aborted cleanly.
+          git tag "$TAG"
           git push origin main
-          git push --force origin "$TAG"
+          git push origin "$TAG"
 
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — uploading asset with --clobber"
@@ -108,7 +122,7 @@ jobs:
       - name: Verify published release matches Package.swift
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.version }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
           REPO: ${{ github.repository }}
         run: |
@@ -136,12 +150,12 @@ jobs:
           fi
           if ! grep -qF "\"$asset_url\"" Package.swift; then
             echo "::error::Package.swift does not reference $asset_url"
-            grep -nE 'xcframeworkURL|xcframeworkChecksum' Package.swift
+            grep -nE 'libghosttyx-' Package.swift || true
             exit 1
           fi
           if ! grep -qF "\"$CHECKSUM\"" Package.swift; then
             echo "::error::Package.swift does not reference checksum $CHECKSUM"
-            grep -nE 'xcframeworkURL|xcframeworkChecksum' Package.swift
+            grep -nE 'libghosttyx-' Package.swift || true
             exit 1
           fi
           echo "Release asset SHA and Package.swift both match — $TAG is publishable"
