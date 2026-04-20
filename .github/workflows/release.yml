@@ -50,13 +50,31 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
+          REPO: ${{ github.repository }}
         run: |
-          repo_url="https://github.com/${{ github.repository }}"
-          asset_url="$repo_url/releases/download/$TAG/libghostty.xcframework.zip"
-          sed -i '' "s|^let xcframeworkURL = .*|let xcframeworkURL = \"$asset_url\"|" Package.swift
-          sed -i '' "s|^let xcframeworkChecksum = .*|let xcframeworkChecksum = \"$CHECKSUM\"|" Package.swift
-          echo "URL:      $asset_url"
-          echo "Checksum: $CHECKSUM"
+          python3 <<'PY'
+          import os, re, sys
+          asset_url = f"https://github.com/{os.environ['REPO']}/releases/download/{os.environ['TAG']}/libghostty.xcframework.zip"
+          checksum = os.environ['CHECKSUM']
+          content = open('Package.swift').read()
+          content, url_n = re.subn(
+              r'let\s+xcframeworkURL\s*=\s*"[^"]*"',
+              f'let xcframeworkURL = "{asset_url}"',
+              content,
+              count=1,
+          )
+          content, sum_n = re.subn(
+              r'let\s+xcframeworkChecksum\s*=\s*"[^"]*"',
+              f'let xcframeworkChecksum = "{checksum}"',
+              content,
+              count=1,
+          )
+          if url_n != 1 or sum_n != 1:
+              sys.exit(f"expected 1 replacement each; got url={url_n} checksum={sum_n}")
+          open('Package.swift', 'w').write(content)
+          print(f"URL:      {asset_url}")
+          print(f"Checksum: {checksum}")
+          PY
           git diff Package.swift
 
       - name: Update tag with Package.swift
@@ -72,12 +90,58 @@ jobs:
           git push origin main
           git push --force origin "$TAG"
 
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" \
-            Frameworks/libghostty.xcframework.zip \
-            --title "$TAG" \
-            --generate-notes
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading asset with --clobber"
+            gh release upload "$TAG" Frameworks/libghostty.xcframework.zip --clobber
+          else
+            gh release create "$TAG" \
+              Frameworks/libghostty.xcframework.zip \
+              --title "$TAG" \
+              --generate-notes
+          fi
+
+      - name: Verify published release matches Package.swift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          REPO: ${{ github.repository }}
+        run: |
+          asset_url="https://github.com/$REPO/releases/download/$TAG/libghostty.xcframework.zip"
+          echo "Verifying asset at $asset_url"
+          for i in 1 2 3 4 5; do
+            http_code=$(curl -sLo /tmp/asset.zip -w '%{http_code}' "$asset_url")
+            if [ "$http_code" = "200" ] && [ -s /tmp/asset.zip ]; then
+              break
+            fi
+            echo "Attempt $i: HTTP $http_code, retrying in 5s..."
+            rm -f /tmp/asset.zip
+            sleep 5
+          done
+          if [ ! -s /tmp/asset.zip ]; then
+            echo "::error::Could not download release asset from $asset_url"
+            exit 1
+          fi
+          downloaded_sha=$(shasum -a 256 /tmp/asset.zip | awk '{print $1}')
+          echo "Downloaded SHA: $downloaded_sha"
+          echo "Computed SHA:   $CHECKSUM"
+          if [ "$downloaded_sha" != "$CHECKSUM" ]; then
+            echo "::error::Downloaded asset SHA does not match computed checksum"
+            exit 1
+          fi
+          if ! grep -qF "\"$asset_url\"" Package.swift; then
+            echo "::error::Package.swift does not reference $asset_url"
+            grep -nE 'xcframeworkURL|xcframeworkChecksum' Package.swift
+            exit 1
+          fi
+          if ! grep -qF "\"$CHECKSUM\"" Package.swift; then
+            echo "::error::Package.swift does not reference checksum $CHECKSUM"
+            grep -nE 'xcframeworkURL|xcframeworkChecksum' Package.swift
+            exit 1
+          fi
+          echo "Release asset SHA and Package.swift both match — $TAG is publishable"
