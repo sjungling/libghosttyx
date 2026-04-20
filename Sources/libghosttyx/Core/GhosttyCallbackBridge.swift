@@ -187,14 +187,19 @@ enum GhosttyCallbackBridge {
         guard let userdata = userdata else { return }
         let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
 
-        DispatchQueue.main.async {
-            // For now, auto-confirm. Host apps can customize via delegate.
-            let content = NSPasteboard.general.string(forType: .string)
-            view.surface?.completeClipboardRequest(
-                data: content,
-                state: statePtr,
-                confirmed: true
-            )
+        // Complete synchronously on the main thread — statePtr is only valid
+        // during this callback invocation, so async dispatch risks a dangling pointer
+        // if the surface is freed before the block executes.
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                let content = NSPasteboard.general.string(forType: .string)
+                view.surface?.completeClipboardRequest(data: content, state: statePtr, confirmed: true)
+            }
+        } else {
+            DispatchQueue.main.async {
+                let content = NSPasteboard.general.string(forType: .string)
+                view.surface?.completeClipboardRequest(data: content, state: statePtr, confirmed: true)
+            }
         }
     }
 

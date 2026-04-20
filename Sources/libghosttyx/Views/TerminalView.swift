@@ -35,7 +35,7 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
   /// Returns the text content of a single viewport row (0-indexed from top).
   public func readLineText(row: Int) -> String? {
-    guard let size = surface?.size else { return nil }
+    guard row >= 0, let size = surface?.size, row < Int(size.rows) else { return nil }
     let sel = ghostty_selection_s(
       top_left: ghostty_point_s(
         tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: UInt32(row)),
@@ -322,6 +322,14 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
 
   open override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+
+    // Remove any previously registered window-specific observers before
+    // re-registering for the new window, preventing duplicate callbacks
+    // when the view moves between windows.
+    NotificationCenter.default.removeObserver(
+      self, name: NSWindow.didChangeBackingPropertiesNotification, object: nil)
+    NotificationCenter.default.removeObserver(
+      self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
 
     if window == nil {
       // NSCursor.hide() is process-wide and reference-counted with no automatic
