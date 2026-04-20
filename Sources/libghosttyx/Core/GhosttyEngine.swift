@@ -62,6 +62,13 @@ public final class GhosttyEngine {
     public func initialize(config termConfig: TerminalConfiguration = .init()) throws {
         guard app == nil else { throw GhosttyError.alreadyInitialized }
 
+        // Set GHOSTTY_RESOURCES_DIR before ghostty_init so the C library finds our
+        // bundled terminfo and sets TERM=xterm-ghostty instead of xterm-256color.
+        // The 0 flag means "don't overwrite" — embedders who set this themselves keep control.
+        if let bundleURL = Bundle.module.resourceURL {
+            setenv("GHOSTTY_RESOURCES_DIR", bundleURL.appendingPathComponent("ghostty").path, 0)
+        }
+
         // Initialize the ghostty runtime
         let initResult = ghostty_init(0, nil)
         guard initResult == 0 else {
