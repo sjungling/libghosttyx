@@ -5,6 +5,7 @@ import libghostty
 @MainActor
 final class ActionHandlingTests: XCTestCase {
 
+    @MainActor
     private class MockDelegate: TerminalViewDelegate {
         var mouseVisibility: Bool?
         var secureInputEnabled: Bool?
