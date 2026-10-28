@@ -13,6 +13,11 @@ final class ActionHandlingTests: XCTestCase {
         var initialSizeArgs: (cols: UInt32, rows: UInt32)?
         var progressArgs: (state: ghostty_action_progress_report_state_e, progress: Int8)?
         var rendererHealth: ghostty_action_renderer_health_e?
+        var openedLink: (url: URL, kind: OpenURLKind)?
+
+        func requestOpenLink(source: TerminalView, url: URL, kind: OpenURLKind) {
+            openedLink = (url, kind)
+        }
 
         func mouseVisibilityChanged(source: TerminalView, visible: Bool) {
             mouseVisibility = visible
@@ -48,6 +53,18 @@ final class ActionHandlingTests: XCTestCase {
         view = nil
         mock = nil
         super.tearDown()
+    }
+
+    func testOpenURLForwardsKindToDelegate() {
+        view.handleAction(.openURL("https://example.com/a", kind: .osc8))
+        XCTAssertEqual(mock.openedLink?.url.absoluteString, "https://example.com/a")
+        XCTAssertEqual(mock.openedLink?.kind, .osc8)
+    }
+
+    func testOpenURLKindDecodesFromRawAction() {
+        XCTAssertEqual(OpenURLKind(GHOSTTY_ACTION_OPEN_URL_KIND_OSC8), .osc8)
+        XCTAssertEqual(OpenURLKind(GHOSTTY_ACTION_OPEN_URL_KIND_TEXT), .text)
+        XCTAssertEqual(OpenURLKind(GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN), .unknown)
     }
 
     func testMouseVisibilityHideNotifiesDelegate() {

@@ -31,6 +31,10 @@ public protocol TerminalViewDelegate: AnyObject {
     /// Called when the terminal requests opening a URL.
     func requestOpenLink(source: TerminalView, url: URL)
 
+    /// Called when the terminal requests opening a URL, with how it was detected.
+    /// The default forwards to ``requestOpenLink(source:url:)``.
+    func requestOpenLink(source: TerminalView, url: URL, kind: OpenURLKind)
+
     /// Called when the mouse hovers over or leaves an OSC 8 hyperlink.
     /// - Parameter url: The hyperlink URI, or nil when the mouse leaves the link.
     func mouseOverLink(source: TerminalView, url: String?)
@@ -81,6 +85,9 @@ public extension TerminalViewDelegate {
     func workingDirectoryChanged(source: TerminalView, directory: String) {}
     func requestOpenLink(source: TerminalView, url: URL) {
         NSWorkspace.shared.open(url)
+    }
+    func requestOpenLink(source: TerminalView, url: URL, kind: OpenURLKind) {
+        requestOpenLink(source: source, url: url)
     }
     func mouseOverLink(source: TerminalView, url: String?) {}
     func processExited(source: TerminalView, exitCode: UInt32, runtimeMs: UInt64) {}

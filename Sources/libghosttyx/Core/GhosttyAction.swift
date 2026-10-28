@@ -16,7 +16,7 @@ public enum GhosttyAction {
     case mouseVisibility(ghostty_action_mouse_visibility_e)
     case render
     case colorChange(kind: ghostty_action_color_kind_e, r: UInt8, g: UInt8, b: UInt8)
-    case openURL(String)
+    case openURL(String, kind: OpenURLKind)
     case reloadConfig(soft: Bool)
     case sizeLimit(minWidth: UInt32, minHeight: UInt32, maxWidth: UInt32, maxHeight: UInt32)
     case initialSize(width: UInt32, height: UInt32)
@@ -84,11 +84,14 @@ public enum GhosttyAction {
 
         case GHOSTTY_ACTION_OPEN_URL:
             let url = raw.action.open_url
+            let kind = OpenURLKind(url.kind)
             if let ptr = url.url {
-                let str = String(cString: ptr)
-                return .openURL(str)
+                let str = String(
+                    decoding: UnsafeRawBufferPointer(start: ptr, count: Int(url.len)),
+                    as: UTF8.self)
+                return .openURL(str, kind: kind)
             }
-            return .openURL("")
+            return .openURL("", kind: kind)
 
         case GHOSTTY_ACTION_RELOAD_CONFIG:
             return .reloadConfig(soft: raw.action.reload_config.soft)
@@ -178,6 +181,24 @@ public enum GhosttyAction {
             return true
         default:
             return false
+        }
+    }
+}
+
+/// How an open-URL request originated.
+public enum OpenURLKind: Sendable {
+    case unknown
+    case text
+    case html
+    /// An explicit OSC 8 hyperlink; the URL is exactly what the program emitted.
+    case osc8
+
+    init(_ raw: ghostty_action_open_url_kind_e) {
+        switch raw {
+        case GHOSTTY_ACTION_OPEN_URL_KIND_TEXT: self = .text
+        case GHOSTTY_ACTION_OPEN_URL_KIND_HTML: self = .html
+        case GHOSTTY_ACTION_OPEN_URL_KIND_OSC8: self = .osc8
+        default: self = .unknown
         }
     }
 }

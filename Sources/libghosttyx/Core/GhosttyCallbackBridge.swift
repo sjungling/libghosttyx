@@ -155,9 +155,10 @@ enum GhosttyCallbackBridge {
     /// Called when libghostty wants to read the clipboard.
     /// The surface userdata points to the TerminalView.
     private static let readClipboardCallback: @convention(c) (
-        UnsafeMutableRawPointer?, ghostty_clipboard_e, UnsafeMutableRawPointer?
-    ) -> Bool = { userdata, clipboardType, statePtr in
-        guard let userdata = userdata else { return false }
+        UnsafeMutableRawPointer?, ghostty_clipboard_e, UnsafeMutableRawPointer?,
+        UnsafePointer<UnsafePointer<CChar>?>?, Int, Bool
+    ) -> ghostty_clipboard_read_result_e = { userdata, clipboardType, statePtr, _, _, _ in
+        guard let userdata = userdata else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
         let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
 
         // Complete synchronously when already on the main thread (the common case:
@@ -174,16 +175,16 @@ enum GhosttyCallbackBridge {
                 view.handleClipboardRequest(type: clipboardType, state: statePtr)
             }
         }
-        return true
+        return GHOSTTY_CLIPBOARD_READ_STARTED
     }
 
     // MARK: - Confirm Clipboard Read
 
     /// Called when libghostty wants confirmation before reading clipboard (OSC 52).
     private static let confirmReadClipboardCallback: @convention(c) (
-        UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UnsafeMutableRawPointer?,
-        ghostty_clipboard_request_e
-    ) -> Void = { userdata, str, statePtr, requestType in
+        UnsafeMutableRawPointer?, UnsafePointer<ghostty_clipboard_confirm_s>?,
+        UnsafeMutableRawPointer?, ghostty_clipboard_request_e
+    ) -> Void = { userdata, _, statePtr, requestType in
         guard let userdata = userdata else { return }
         let view = Unmanaged<TerminalView>.fromOpaque(userdata).takeUnretainedValue()
 
@@ -216,7 +217,8 @@ enum GhosttyCallbackBridge {
         // Copy the C string synchronously — the pointer is only valid during this callback.
         let entry = content.pointee
         guard let dataPtr = entry.data else { return }
-        let str = String(cString: dataPtr)
+        let str = String(
+            decoding: UnsafeRawBufferPointer(start: dataPtr, count: entry.len), as: UTF8.self)
 
         DispatchQueue.main.async {
             let pasteboard = NSPasteboard.general

@@ -1,6 +1,8 @@
 import XCTest
+import libghostty
 @testable import libghosttyx
 
+@MainActor
 final class ConfigurationTests: XCTestCase {
     func testDefaultConfiguration() {
         let config = TerminalConfiguration()
@@ -10,6 +12,14 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertNil(config.workingDirectory)
         XCTAssertNil(config.command)
         XCTAssertTrue(config.environmentVariables.isEmpty)
+    }
+
+    func testEmbedderDefaultsCopyOnSelectToClipboard() throws {
+        XCTAssertEqual(ghostty_init(0, nil), 0)
+        let config = try GhosttyConfig()
+        config.loadEmbedderDefaults()
+        config.finalize()
+        XCTAssertEqual(config.getString("copy-on-select"), "clipboard")
     }
 
     func testCustomConfiguration() {

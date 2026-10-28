@@ -98,12 +98,14 @@ for slice_dir in "$XCFRAMEWORK_PATH"/ios-*/; do
 done
 
 # --- Rename library ---
-# Universal build produces libghostty.a, native produces libghostty-fat.a.
-# Normalize to libghostty.a in all cases.
+# Ghostty <1.4 emits libghostty.a (universal) or libghostty-fat.a (native);
+# 1.4+ emits ghostty-internal.a. Normalize to libghostty.a in all cases.
 for arch_dir in "$XCFRAMEWORK_PATH"/macos-*/; do
-    if [[ -f "$arch_dir/libghostty-fat.a" ]]; then
-        mv "$arch_dir/libghostty-fat.a" "$arch_dir/libghostty.a"
-    fi
+    for built in libghostty-fat.a ghostty-internal.a; do
+        if [[ -f "$arch_dir/$built" ]]; then
+            mv "$arch_dir/$built" "$arch_dir/libghostty.a"
+        fi
+    done
     if [[ ! -f "$arch_dir/libghostty.a" ]]; then
         echo "Error: no static library found in $(basename "$arch_dir")"
         ls -la "$arch_dir"

@@ -79,6 +79,7 @@ public final class GhosttyEngine {
         let cfg = try GhosttyConfig()
 
         // Load defaults and CLI args first
+        cfg.loadEmbedderDefaults()
         cfg.loadDefaultFiles()
         cfg.loadCLIArgs()
         cfg.loadRecursiveFiles()
