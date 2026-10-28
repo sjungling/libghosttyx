@@ -46,7 +46,8 @@ public final class GhosttySurface {
     /// Sets whether the surface is occluded (hidden behind other windows).
     func setOcclusion(_ occluded: Bool) {
         guard let surface = rawSurface else { return }
-        ghostty_surface_set_occlusion(surface, occluded)
+        // The C API's bool means "visible", not "occluded".
+        ghostty_surface_set_occlusion(surface, !occluded)
     }
 
     /// Sets the surface size in pixels.
