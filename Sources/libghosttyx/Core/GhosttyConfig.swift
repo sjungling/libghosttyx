@@ -28,6 +28,21 @@ public final class GhosttyConfig {
         }
     }
 
+    /// Embedder defaults, loaded before any user config so user files still override them.
+    /// `copy-on-select` defaults to `none` on macOS as of Ghostty 1.4.
+    static let embedderDefaults = "copy-on-select = clipboard\n"
+
+    /// Loads ``embedderDefaults`` by round-tripping through a temporary file,
+    /// since the C API can only load config from files.
+    func loadEmbedderDefaults() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("libghosttyx-defaults-\(UUID().uuidString).conf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard (try? Self.embedderDefaults.write(to: url, atomically: true, encoding: .utf8)) != nil
+        else { return }
+        loadFile(url.path)
+    }
+
     /// Loads the default config files (~/.config/ghostty/config, etc.).
     public func loadDefaultFiles() {
         guard let cfg = rawConfig else { return }

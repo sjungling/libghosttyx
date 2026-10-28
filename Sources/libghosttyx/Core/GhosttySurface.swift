@@ -212,12 +212,27 @@ public final class GhosttySurface {
         confirmed: Bool
     ) {
         guard let surface = rawSurface else { return }
-        if let data = data {
-            data.withCString { ptr in
-                ghostty_surface_complete_clipboard_request(surface, ptr, state, confirmed)
+        guard let data = data else {
+            var empty = ghostty_clipboard_complete_s(
+                contents: nil, contents_len: 0, available: nil, available_len: 0,
+                confirmed: confirmed, remember: false)
+            ghostty_surface_complete_clipboard_request(surface, &empty, state)
+            return
+        }
+        let bytes = Array(data.utf8)
+        "text/plain".withCString { mime in
+            bytes.withUnsafeBufferPointer { buffer in
+                buffer.withMemoryRebound(to: CChar.self) { chars in
+                    var content = ghostty_clipboard_content_s(
+                        mime: mime, data: chars.baseAddress, len: chars.count)
+                    withUnsafePointer(to: &content) { contentPtr in
+                        var complete = ghostty_clipboard_complete_s(
+                            contents: contentPtr, contents_len: 1, available: nil,
+                            available_len: 0, confirmed: confirmed, remember: false)
+                        ghostty_surface_complete_clipboard_request(surface, &complete, state)
+                    }
+                }
             }
-        } else {
-            ghostty_surface_complete_clipboard_request(surface, nil, state, confirmed)
         }
     }
 

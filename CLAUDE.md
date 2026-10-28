@@ -73,7 +73,7 @@ swift build
 
 - macOS 13+
 - Xcode with Command Line Tools
-- Zig (exact version in `.zig-version`, currently 0.15.2) - use `mise install zig` or download from ziglang.org
+- Zig (exact version in `.zig-version`, currently 0.17.0) - use `mise install zig` or download from ziglang.org
 
 ## Key Conventions
 

@@ -807,9 +807,9 @@ open class TerminalView: NSView, @preconcurrency NSTextInputClient {
     case .colorChange(let kind, let r, let g, let b):
       delegate?.colorChanged(source: self, kind: Int(kind.rawValue), r: r, g: g, b: b)
 
-    case .openURL(let urlString):
+    case .openURL(let urlString, let kind):
       if let url = URL(string: urlString) {
-        delegate?.requestOpenLink(source: self, url: url)
+        delegate?.requestOpenLink(source: self, url: url, kind: kind)
       }
 
     case .showChildExited(let exitCode, let runtimeMs):
